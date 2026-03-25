@@ -1,5 +1,7 @@
 # OOP Quest — Java Battle Arena
 
+**[Play Now → java-oop-quest.netlify.app](https://java-oop-quest.netlify.app/)**
+
 A 3D interactive game that teaches Java Object-Oriented Programming through gameplay. Students write Java code that directly controls characters in a Clash-of-Clans-style battlefield built with Three.js.
 
 ## Features
