@@ -182,6 +182,7 @@ export default function App() {
             Write Java code to summon warriors, cast spells, and battle in 3D.<br />
             15 Chapters · XP &amp; Levels · Enemy AI · Keyboard Combat
           </div>
+          <div className="copyright">© {new Date().getFullYear()} Heba El-Shimy. All rights reserved.</div>
         </div>
       </div>
     )
@@ -380,6 +381,7 @@ export default function App() {
           </div>
         </div>
       </div>
+      <div className="copyright">© {new Date().getFullYear()} Heba El-Shimy. All rights reserved.</div>
     </div>
   )
 }
