@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OOP Quest — Java Battle Arena</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔️</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&family=Exo+2:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;width:100%;overflow:hidden;background:#080c14}
+body{font-family:'Exo 2',sans-serif;color:#c8d6e5}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:#0e1420}
+::-webkit-scrollbar-thumb{background:#2a3a5c;border-radius:3px}
+.app{display:flex;height:100vh;flex-direction:column}
+.topbar{height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:#0b1022;border-bottom:1px solid #1a2744;flex-shrink:0;z-index:10}
+.topbar-title{font-family:'Orbitron',sans-serif;font-size:18px;font-weight:800;background:linear-gradient(135deg,#ff6b35,#ffc045);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.topbar-quest{font-size:12px;color:#5a7a9a;font-family:'JetBrains Mono',monospace}
+.quest-dots{display:flex;gap:3px}
+.quest-dot{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;cursor:pointer;transition:all .2s;border:1px solid #1a2744;background:#0e1420;color:#3a5a7a}
+.quest-dot.active{background:linear-gradient(135deg,#ff6b35,#e8522a);color:#fff;border-color:#ff6b35}
+.quest-dot.done{background:rgba(46,204,113,.12);color:#2ecc71;border-color:rgba(46,204,113,.3)}
+.main{flex:1;display:flex;min-height:0}
+.arena-col{flex:1;display:flex;flex-direction:column;min-width:0}
+.quest-bar{padding:10px 16px;background:#0b1022;border-bottom:1px solid #1a2744;flex-shrink:0}
+.quest-title{font-family:'Orbitron',sans-serif;font-size:13px;font-weight:700;color:#ff6b35;margin-bottom:3px}
+.quest-desc{font-size:12px;color:#6a8aaa;line-height:1.5}
+.arena-wrap{flex:1;position:relative;overflow:hidden;background:#87CEEB}
+.arena-wrap canvas{display:block;width:100%;height:100%}
+.console-wrap{flex-shrink:0;padding:0 10px 8px;background:#080c14}
+.console-label{font-size:9px;color:#2a4a6a;padding:4px 0 3px;font-family:'JetBrains Mono',monospace;letter-spacing:1.5px;text-transform:uppercase}
+.console-box{height:88px;overflow-y:auto;padding:6px 10px;background:#0a0f1a;border-radius:5px;border:1px solid #12203a;font-size:11px;font-family:'JetBrains Mono',monospace;line-height:1.5}
+.console-line{margin-bottom:1px;animation:fadeSlide .2s ease}
+.console-line .prompt{color:#2a4a6a;margin-right:5px}
+.editor-col{width:420px;min-width:360px;max-width:500px;display:flex;flex-direction:column;border-left:1px solid #1a2744;background:#0c1018;flex-shrink:0}
+.editor-head{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:#0e1420;border-bottom:1px solid #1a2744;flex-shrink:0}
+.editor-dots{display:flex;gap:4px}
+.editor-dots span{width:9px;height:9px;border-radius:50%}
+.editor-filename{font-size:11px;color:#5a7a9a;font-family:'JetBrains Mono',monospace;margin-left:8px}
+.editor-actions{display:flex;gap:6px}
+.btn-hint,.btn-run{padding:3px 10px;font-size:10px;border-radius:4px;cursor:pointer;font-family:'JetBrains Mono',monospace;border:1px solid;transition:all .2s}
+.btn-hint{background:transparent;color:#ffc045;border-color:#3a2a10}
+.btn-hint:hover{background:#1a1508}
+.btn-run{background:linear-gradient(135deg,#2ecc71,#1ea85a);color:#fff;border-color:transparent;font-weight:600;letter-spacing:.3px}
+.btn-run:hover{filter:brightness(1.1)}
+.hint-panel{padding:8px 12px;background:#120e06;border-bottom:1px solid #2a2010;flex-shrink:0;font-size:11px;font-family:'JetBrains Mono',monospace;color:#8a7a50;white-space:pre-wrap;line-height:1.5}
+.hint-panel .hint-tier{color:#ffc045;font-weight:600;margin-bottom:3px;font-size:10px;letter-spacing:.5px}
+.hint-panel button{display:inline-block;margin-top:6px;padding:2px 10px;font-size:10px;background:rgba(255,192,69,.1);color:#ffc045;border:1px solid #3a2a10;border-radius:3px;cursor:pointer;font-family:'JetBrains Mono',monospace}
+.editor-body{flex:1;position:relative;min-height:0;display:flex}
+.line-nums{width:38px;padding:12px 6px 12px 0;text-align:right;font-size:12px;font-family:'JetBrains Mono',monospace;color:#2a3a5c;line-height:1.65;overflow:hidden;user-select:none;background:#0a0e16;border-right:1px solid #12203a;flex-shrink:0}
+.code-ta{flex:1;background:#0c1018;color:#c8d6e5;border:none;outline:none;resize:none;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.65;padding:12px 12px 12px 10px;tab-size:4;white-space:pre;overflow:auto}
+.code-ta::selection{background:#1a3a6a}
+.result-bar{padding:8px 12px;flex-shrink:0;border-top:1px solid #1a2744;min-height:40px}
+.result-msg{font-size:12px;font-family:'JetBrains Mono',monospace;display:flex;align-items:center;gap:6px}
+.result-msg.pass{color:#2ecc71}
+.result-msg.fail{color:#e74c3c}
+.result-msg.idle{color:#3a5a7a}
+.btn-next{margin-top:6px;padding:6px 18px;font-size:11px;font-family:'Orbitron',sans-serif;font-weight:700;background:linear-gradient(135deg,#ff6b35,#e8522a);color:#fff;border:none;border-radius:5px;cursor:pointer;letter-spacing:1px;box-shadow:0 2px 12px rgba(255,107,53,.3);animation:bounceIn .4s ease}
+.trophy{margin-top:6px;padding:8px 14px;border-radius:5px;background:linear-gradient(135deg,rgba(255,107,53,.1),rgba(255,192,69,.1));border:1px solid #3a2a10;text-align:center}
+.trophy-icon{font-size:22px}
+.trophy-title{font-size:13px;color:#ffc045;font-family:'Orbitron',sans-serif;font-weight:700;margin-top:2px}
+.trophy-sub{font-size:11px;color:#6a8aaa;margin-top:2px}
+@keyframes fadeSlide{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes bounceIn{0%{transform:scale(0)}60%{transform:scale(1.1)}100%{transform:scale(1)}}
+@keyframes successPulse{0%{box-shadow:0 0 0 0 rgba(46,204,113,.3)}70%{box-shadow:0 0 0 10px rgba(46,204,113,0)}100%{box-shadow:0 0 0 0 rgba(46,204,113,0)}}
+.splash{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 60%,#1a3a5c,#080c14 70%);z-index:100}
+.splash-title{font-family:'Orbitron',sans-serif;font-size:64px;font-weight:900;background:linear-gradient(135deg,#ff6b35,#ffc045,#2ecc71,#3498db);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:3px;margin-bottom:6px}
+.splash-sub{font-size:16px;color:#5a7a9a;letter-spacing:5px;text-transform:uppercase;margin-bottom:36px}
+.splash-chars{display:flex;gap:32px;margin-bottom:40px}
+.splash-char{text-align:center}
+.splash-char-icon{width:70px;height:70px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:6px;border:2px solid}
+.splash-char-label{font-size:10px;font-family:'JetBrains Mono',monospace}
+.btn-start{padding:14px 44px;font-size:16px;font-family:'Orbitron',sans-serif;font-weight:700;background:linear-gradient(135deg,#ff6b35,#e8522a);color:#fff;border:none;border-radius:7px;cursor:pointer;letter-spacing:2px;text-transform:uppercase;box-shadow:0 4px 24px rgba(255,107,53,.35);transition:transform .2s}
+.btn-start:hover{transform:scale(1.04)}
+.splash-footer{margin-top:24px;font-size:12px;color:#3a5a7a;text-align:center;line-height:1.6}
+.splash-particle{position:absolute;border-radius:50%;pointer-events:none;animation:particleFloat 4s ease-in-out infinite}
+@keyframes particleFloat{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-10px) scale(1.1)}}
+</style>
+</head>
+<body>
+<script>
+// ══════════════════════════════════════════════════════════════════
+// ISOMETRIC GAME ENGINE — Clash of Clans Style
+// ══════════════════════════════════════════════════════════════════
+var Engine=(function(){
+var TW=64,TH=32,COLS=14,ROWS=12;
+
+var MAP=[
+[0,1,0,0,0,0,0,0,0,0,0,0,0,1],
+[0,0,0,0,2,2,2,0,0,0,0,0,0,0],
+[1,0,0,2,2,3,3,2,2,0,0,0,1,0],
+[0,0,2,2,3,3,3,3,2,2,0,0,0,0],
+[0,0,2,3,3,3,3,3,3,2,0,0,0,0],
+[4,4,5,2,3,3,3,3,2,2,0,0,0,1],
+[4,4,5,2,2,3,3,2,2,0,0,1,0,0],
+[0,0,0,2,2,2,2,2,0,0,0,0,0,0],
+[0,1,0,0,0,2,0,0,0,1,0,0,0,0],
+[1,0,0,0,0,0,0,0,0,0,0,0,1,0],
+[0,0,1,0,0,0,0,0,1,0,0,0,0,0],
+[0,0,0,0,0,0,0,0,0,0,1,0,0,0]
+];
+
+var DECOS=[
+{c:0,r:0,t:'tree'},{c:1,r:1,t:'tree'},{c:12,r:0,t:'tree'},{c:13,r:1,t:'bush'},
+{c:0,r:9,t:'tree'},{c:13,r:10,t:'tree'},{c:11,r:8,t:'bush'},{c:1,r:10,t:'bush'},
+{c:8,r:9,t:'tree'},{c:2,r:2,t:'rock'},{c:10,r:3,t:'bush'},{c:13,r:0,t:'tree'},
+{c:0,r:4,t:'bush'},{c:9,r:0,t:'rock'},{c:3,r:10,t:'bush'},{c:6,r:10,t:'tree'},
+{c:11,r:1,t:'tree'},{c:12,r:6,t:'bush'},{c:0,r:7,t:'tree'},{c:10,r:10,t:'rock'},
+{c:7,r:0,t:'bush'},{c:13,r:4,t:'tree'},{c:1,r:5,t:'flower'},{c:10,r:7,t:'flower'},
+{c:12,r:9,t:'flower'},{c:3,r:0,t:'flower'},{c:8,r:11,t:'bush'},{c:2,r:8,t:'flower'},
+{c:5,r:0,t:'campfire'}
+];
+
+// ─── BRIGHT COC PALETTE ───
+var TC=[
+{t:'#7CB342',l:'#558B2F',r:'#689F38'},  // 0 grass
+{t:'#66BB6A',l:'#4CAF50',r:'#43A047'},  // 1 tall grass
+{t:'#D7A86E',l:'#B8944D',r:'#C49A5C'},  // 2 dirt
+{t:'#BDBDBD',l:'#8A8A8A',r:'#9E9E9E'},  // 3 stone
+{t:'#29B6F6',l:'#0288D1',r:'#039BE5'},  // 4 water
+{t:'#A1887F',l:'#6D4C41',r:'#8D6E63'}   // 5 bridge
+];
+
+var PALETTES={
+Warrior:{body:'#D32F2F',armor:'#EF5350',accent:'#FFC107',skin:'#FFCCBC',hair:'#5D4037',pants:'#4E342E',boots:'#3E2723',outline:'#7f1d1d'},
+Mage:{body:'#7B1FA2',armor:'#AB47BC',accent:'#64B5F6',skin:'#FFCCBC',hair:'#E0E0E0',pants:'#4A148C',boots:'#311B92',outline:'#4a0072'},
+Archer:{body:'#2E7D32',armor:'#4CAF50',accent:'#FFEB3B',skin:'#FFCCBC',hair:'#795548',pants:'#33691E',boots:'#1B5E20',outline:'#1b5e20'},
+Healer:{body:'#F9A825',armor:'#FDD835',accent:'#66BB6A',skin:'#FFCCBC',hair:'#D32F2F',pants:'#F57F17',boots:'#E65100',outline:'#e65100'},
+GameCharacter:{body:'#546E7A',armor:'#78909C',accent:'#B0BEC5',skin:'#FFCCBC',hair:'#37474F',pants:'#455A64',boots:'#263238',outline:'#263238'}
+};
+function pal(cn){return PALETTES[cn]||PALETTES.GameCharacter;}
+
+function toScr(c,r,ox,oy){return{x:(c-r)*(TW/2)+ox,y:(c+r)*(TH/2)+oy};}
+
+function rr(ctx,x,y,w,h,rad){
+ctx.beginPath();ctx.moveTo(x+rad,y);ctx.lineTo(x+w-rad,y);ctx.quadraticCurveTo(x+w,y,x+w,y+rad);
+ctx.lineTo(x+w,y+h-rad);ctx.quadraticCurveTo(x+w,y+h,x+w-rad,y+h);ctx.lineTo(x+rad,y+h);
+ctx.quadraticCurveTo(x,y+h,x,y+h-rad);ctx.lineTo(x,y+rad);ctx.quadraticCurveTo(x,y,x+rad,y);ctx.closePath();
+}
+
+function outlined(ctx,fillC,strokeC,lw){
+ctx.fillStyle=fillC;ctx.fill();
+if(strokeC){ctx.strokeStyle=strokeC;ctx.lineWidth=lw||1.5;ctx.lineJoin='round';ctx.stroke();}
+}
+
+// ─── SKY & BACKGROUND ───
+function drawSky(ctx,w,h,t){
+var sky=ctx.createLinearGradient(0,0,0,h*0.5);
+sky.addColorStop(0,'#4FC3F7');sky.addColorStop(0.6,'#81D4FA');sky.addColorStop(1,'#B3E5FC');
+ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
+// Sun
+var sunX=w*0.85,sunY=h*0.08;
+var glow=ctx.createRadialGradient(sunX,sunY,5,sunX,sunY,60);
+glow.addColorStop(0,'rgba(255,249,196,0.9)');glow.addColorStop(0.3,'rgba(255,236,179,0.3)');glow.addColorStop(1,'transparent');
+ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sunX,sunY,60,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#FFF9C4';ctx.beginPath();ctx.arc(sunX,sunY,14,0,Math.PI*2);ctx.fill();
+// Clouds
+ctx.fillStyle='rgba(255,255,255,0.75)';
+for(var i=0;i<5;i++){
+var cx=((i*w/3.5+t*12*(i%2?1:-0.7))%(w+300))-150;
+var cy=20+Math.sin(i*2.3)*20+i*8;
+var sc=0.7+Math.sin(i*1.7)*0.3;
+ctx.beginPath();
+ctx.arc(cx,cy,14*sc,0,Math.PI*2);ctx.arc(cx+16*sc,cy-6*sc,12*sc,0,Math.PI*2);
+ctx.arc(cx+32*sc,cy-2*sc,14*sc,0,Math.PI*2);ctx.arc(cx+14*sc,cy+4*sc,10*sc,0,Math.PI*2);
+ctx.fill();
+}
+// Hills (3 layers)
+var hills=[{c:'#4CAF50',a:0.006,b:0.014,h:0.32,off:0},{c:'#43A047',a:0.009,b:0.018,h:0.36,off:20},{c:'#388E3C',a:0.012,b:0.008,h:0.38,off:50}];
+hills.forEach(function(hl){
+ctx.fillStyle=hl.c;ctx.beginPath();ctx.moveTo(0,h*hl.h);
+for(var x=0;x<=w;x+=20)ctx.lineTo(x,h*hl.h-Math.sin(x*hl.a+hl.off)*22-Math.sin(x*hl.b+hl.off*2)*12);
+ctx.lineTo(w,h);ctx.lineTo(0,h);ctx.closePath();ctx.fill();
+});
+}
+
+// ─── TILES ───
+function drawTile(ctx,sx,sy,type,t){
+var hw=TW/2,hh=TH/2;
+var dp=type===3?14:type===4?6:type===5?10:10;
+var c=TC[type]||TC[0];
+var wc1=c.t,wl=c.l,wr=c.r;
+// Water animation
+if(type===4){
+var sh=Math.sin(t*2+sx*0.02)*20;
+var r2=parseInt('29',16)+sh|0,g2=parseInt('B6',16)+sh|0;
+wc1='rgb('+Math.min(255,Math.max(0,r2*1.1|0))+','+Math.min(255,Math.max(0,g2))+',246)';
+}
+// Top face
+ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(sx+hw,sy+hh);ctx.lineTo(sx,sy+TH);ctx.lineTo(sx-hw,sy+hh);ctx.closePath();
+ctx.fillStyle=wc1;ctx.fill();
+ctx.strokeStyle='rgba(0,0,0,0.08)';ctx.lineWidth=0.5;ctx.stroke();
+// Left face
+ctx.beginPath();ctx.moveTo(sx-hw,sy+hh);ctx.lineTo(sx,sy+TH);ctx.lineTo(sx,sy+TH+dp);ctx.lineTo(sx-hw,sy+hh+dp);ctx.closePath();
+ctx.fillStyle=wl;ctx.fill();
+ctx.strokeStyle='rgba(0,0,0,0.12)';ctx.stroke();
+// Right face
+ctx.beginPath();ctx.moveTo(sx+hw,sy+hh);ctx.lineTo(sx,sy+TH);ctx.lineTo(sx,sy+TH+dp);ctx.lineTo(sx+hw,sy+hh+dp);ctx.closePath();
+ctx.fillStyle=wr;ctx.fill();
+ctx.strokeStyle='rgba(0,0,0,0.08)';ctx.stroke();
+// Grass blades
+if(type<=1){
+ctx.fillStyle=type===0?'#8BC34A':'#81C784';
+for(var i=0;i<4;i++){
+var gx=sx+(Math.sin(sx+i*37)*10);var gy=sy+hh-1+(Math.cos(sy+i*19)*3);
+ctx.fillRect(gx,gy-3-Math.sin(t*1.5+i)*1,1.5,4);
+}}
+// Stone cracks
+if(type===3){
+ctx.strokeStyle='rgba(0,0,0,0.1)';ctx.lineWidth=0.7;
+ctx.beginPath();ctx.moveTo(sx-6,sy+hh+1);ctx.lineTo(sx+4,sy+hh-3);ctx.stroke();
+ctx.beginPath();ctx.moveTo(sx+2,sy+hh+4);ctx.lineTo(sx+12,sy+hh);ctx.stroke();
+}
+// Water shimmer
+if(type===4){
+ctx.fillStyle='rgba(255,255,255,0.25)';
+var wx=sx+Math.sin(t*2.5+sx*0.1)*6;
+ctx.fillRect(wx-3,sy+hh-1,7,1.5);ctx.fillRect(wx+10,sy+hh+3,5,1);
+}
+// Bridge planks
+if(type===5){
+ctx.strokeStyle='rgba(0,0,0,0.15)';ctx.lineWidth=0.8;
+for(var i=-1;i<2;i++){
+ctx.beginPath();ctx.moveTo(sx-hw+6,sy+hh+i*6);ctx.lineTo(sx+hw-6,sy+hh+i*6-3);ctx.stroke();
+}}
+}
+
+// ─── DECORATIONS ───
+function drawTree(ctx,sx,sy,t){
+ctx.fillStyle='rgba(0,0,0,0.18)';ctx.beginPath();ctx.ellipse(sx+4,sy+5,16,6,0,0,Math.PI*2);ctx.fill();
+// Trunk
+ctx.fillStyle='#6D4C41';ctx.strokeStyle='#4E342E';ctx.lineWidth=1.5;
+ctx.fillRect(sx-4,sy-32,8,34);ctx.strokeRect(sx-4,sy-32,8,34);
+var sw=Math.sin(t*0.7+sx*0.04)*2;
+// Canopy (3 circles for fullness)
+ctx.fillStyle='#2E7D32';ctx.strokeStyle='#1B5E20';ctx.lineWidth=2;
+ctx.beginPath();ctx.arc(sx+sw-8,sy-32,13,0,Math.PI*2);ctx.fill();ctx.stroke();
+ctx.beginPath();ctx.arc(sx+sw+8,sy-32,13,0,Math.PI*2);ctx.fill();ctx.stroke();
+ctx.fillStyle='#43A047';
+ctx.beginPath();ctx.arc(sx+sw,sy-38,15,0,Math.PI*2);ctx.fill();ctx.stroke();
+// Highlight
+ctx.fillStyle='#66BB6A';ctx.beginPath();ctx.arc(sx+sw-2,sy-42,8,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='rgba(255,255,255,0.12)';ctx.beginPath();ctx.arc(sx+sw-4,sy-44,4,0,Math.PI*2);ctx.fill();
+}
+function drawBush(ctx,sx,sy,t){
+ctx.fillStyle='rgba(0,0,0,0.15)';ctx.beginPath();ctx.ellipse(sx+2,sy+3,11,4,0,0,Math.PI*2);ctx.fill();
+var sw=Math.sin(t*1.1+sx*0.08);
+ctx.fillStyle='#388E3C';ctx.strokeStyle='#1B5E20';ctx.lineWidth=1.5;
+ctx.beginPath();ctx.ellipse(sx+sw,sy-6,13,10,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+ctx.fillStyle='#4CAF50';ctx.beginPath();ctx.ellipse(sx+sw+3,sy-9,9,7,0,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#66BB6A';ctx.beginPath();ctx.ellipse(sx+sw-2,sy-11,5,4,0,0,Math.PI*2);ctx.fill();
+}
+function drawRock(ctx,sx,sy){
+ctx.fillStyle='rgba(0,0,0,0.15)';ctx.beginPath();ctx.ellipse(sx+2,sy+3,10,4,0,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#78909C';ctx.strokeStyle='#455A64';ctx.lineWidth=1.5;
+ctx.beginPath();ctx.moveTo(sx-9,sy);ctx.lineTo(sx-5,sy-12);ctx.lineTo(sx+7,sy-14);ctx.lineTo(sx+11,sy-5);ctx.lineTo(sx+7,sy+2);ctx.closePath();ctx.fill();ctx.stroke();
+ctx.fillStyle='#90A4AE';ctx.beginPath();ctx.moveTo(sx-7,sy-2);ctx.lineTo(sx-3,sy-11);ctx.lineTo(sx+8,sy-13);ctx.lineTo(sx+9,sy-6);ctx.closePath();ctx.fill();
+ctx.fillStyle='rgba(255,255,255,0.15)';ctx.beginPath();ctx.moveTo(sx-2,sy-9);ctx.lineTo(sx+3,sy-12);ctx.lineTo(sx+5,sy-8);ctx.closePath();ctx.fill();
+}
+function drawFlower(ctx,sx,sy,t){
+var colors=['#E91E63','#FF9800','#FFEB3B','#9C27B0','#2196F3'];
+var ci=(Math.abs(sx*7+sy*13)|0)%colors.length;
+var sw=Math.sin(t*1.5+sx)*0.5;
+ctx.fillStyle=colors[ci];
+for(var i=0;i<5;i++){
+var a=(i/5)*Math.PI*2+sw;
+ctx.beginPath();ctx.arc(sx+Math.cos(a)*3,sy-4+Math.sin(a)*3,2,0,Math.PI*2);ctx.fill();
+}
+ctx.fillStyle='#FFF176';ctx.beginPath();ctx.arc(sx,sy-4,1.5,0,Math.PI*2);ctx.fill();
+}
+function drawCampfire(ctx,sx,sy,t){
+// Logs
+ctx.fillStyle='#5D4037';ctx.strokeStyle='#3E2723';ctx.lineWidth=1;
+ctx.save();ctx.translate(sx,sy);
+ctx.rotate(0.3);ctx.fillRect(-10,-2,20,4);ctx.strokeRect(-10,-2,20,4);
+ctx.rotate(-0.6);ctx.fillRect(-10,-2,20,4);ctx.strokeRect(-10,-2,20,4);
+ctx.restore();
+// Flames
+for(var i=0;i<4;i++){
+var fx=sx+Math.sin(t*5+i*2)*3;
+var fy=sy-8-i*4-Math.sin(t*6+i)*4;
+var fs=5-i*0.8;
+ctx.fillStyle=i<2?'#FF6F00':'#FFCA28';
+ctx.globalAlpha=0.7+Math.sin(t*7+i)*0.3;
+ctx.beginPath();ctx.ellipse(fx,fy,fs,fs*1.5,0,0,Math.PI*2);ctx.fill();
+}
+ctx.globalAlpha=1;
+// Glow
+var glow=ctx.createRadialGradient(sx,sy-10,2,sx,sy-10,30);
+glow.addColorStop(0,'rgba(255,152,0,0.2)');glow.addColorStop(1,'transparent');
+ctx.fillStyle=glow;ctx.beginPath();ctx.arc(sx,sy-10,30,0,Math.PI*2);ctx.fill();
+}
+
+// ─── CHARACTER (CoC Style) ───
+function drawChar(ctx,ch,t){
+var p=pal(ch.className),sx=ch.screenX,sy=ch.screenY;
+var dir=ch.facingLeft?-1:1;
+var bob=Math.sin(t*2+ch.id.charCodeAt(0)*0.5)*2;
+var wk=ch.walking;
+var wBob=wk?Math.sin(t*10)*2:0;
+var atk=ch.atkTimer>0;
+var hurt=ch.hurtTimer>0;
+var casting=ch.castTimer>0;
+var defending=ch.defTimer>0;
+var dead=ch.hp<=0;
+
+ctx.save();
+ctx.translate(sx,sy+bob+wBob);
+if(dead){ctx.globalAlpha=0.4;ctx.translate(0,8);ctx.rotate(0.3*dir);}
+ctx.scale(dir,1);
+
+// Shadow
+ctx.fillStyle='rgba(0,0,0,0.25)';ctx.beginPath();ctx.ellipse(0,20,18,7,0,0,Math.PI*2);ctx.fill();
+
+if(hurt&&Math.sin(t*30)>0)ctx.globalAlpha=Math.max(ctx.globalAlpha*0.4,0.15);
+
+var OL='#1a1a2e',OW=1.8;
+
+// ─ LEGS ─
+var legSwing=wk?Math.sin(t*10)*0.4:0;
+ctx.save();ctx.translate(-4,8);ctx.rotate(-legSwing);
+ctx.fillStyle=p.pants;rr(ctx,-3,0,6,11,2);ctx.fill();
+ctx.strokeStyle=OL;ctx.lineWidth=OW;ctx.lineJoin='round';ctx.stroke();
+ctx.fillStyle=p.boots;rr(ctx,-4,9,8,4,2);ctx.fill();ctx.stroke();
+ctx.restore();
+ctx.save();ctx.translate(4,8);ctx.rotate(legSwing);
+ctx.fillStyle=p.pants;rr(ctx,-3,0,6,11,2);ctx.fill();
+ctx.strokeStyle=OL;ctx.lineWidth=OW;ctx.lineJoin='round';ctx.stroke();
+ctx.fillStyle=p.boots;rr(ctx,-4,9,8,4,2);ctx.fill();ctx.stroke();
+ctx.restore();
+
+// ─ BODY ─
+ctx.strokeStyle=OL;ctx.lineWidth=OW;ctx.lineJoin='round';
+ctx.fillStyle=p.body;rr(ctx,-11,-10,22,20,5);ctx.fill();ctx.stroke();
+// Armor plate
+ctx.fillStyle=p.armor;ctx.globalAlpha=Math.min(ctx.globalAlpha,0.35);rr(ctx,-8,-7,16,14,3);ctx.fill();ctx.globalAlpha=hurt&&Math.sin(t*30)>0?0.4:dead?0.4:1;
+// Belt
+ctx.fillStyle=p.accent;ctx.strokeStyle=OL;ctx.lineWidth=OW;
+rr(ctx,-10,6,20,3,1);ctx.fill();ctx.stroke();
+
+// ─ LEFT ARM ─
+var armBack=wk?Math.sin(t*10)*0.25:0;
+ctx.save();ctx.translate(-11,-5);ctx.rotate(-0.15-armBack);
+ctx.fillStyle=p.body;rr(ctx,-3,0,7,13,2);ctx.fill();
+ctx.strokeStyle=OL;ctx.lineWidth=OW;ctx.stroke();
+ctx.fillStyle=p.skin;ctx.beginPath();ctx.arc(0.5,13,3.5,0,Math.PI*2);
+ctx.fill();ctx.strokeStyle=OL;ctx.lineWidth=OW;ctx.stroke();
+// Shield for warrior/gamecharacter
+var cn=ch.className;
+if(cn==='Warrior'||cn==='GameCharacter'){
+ctx.fillStyle='#78909C';ctx.strokeStyle='#455A64';ctx.lineWidth=1.5;
+ctx.beginPath();ctx.ellipse(-1,8,6,9,0.2,0,Math.PI*2);ctx.fill();ctx.stroke();
+ctx.fillStyle=p.accent;ctx.beginPath();ctx.ellipse(-1,8,3,4,0.2,0,Math.PI*2);ctx.fill();
+}
+ctx.restore();
+
+// ─ RIGHT ARM + WEAPON ─
+var aSwing=atk?Math.sin(t*16)*1.0:(casting?-0.6+Math.sin(t*4)*0.2:(wk?-Math.sin(t*10)*0.25:0));
+ctx.save();ctx.translate(11,-5);ctx.rotate(0.15+aSwing);
+ctx.fillStyle=p.body;rr(ctx,-4,0,7,13,2);ctx.fill();
+ctx.strokeStyle=OL;ctx.lineWidth=OW;ctx.stroke();
+ctx.fillStyle=p.skin;ctx.beginPath();ctx.arc(-0.5,13,3.5,0,Math.PI*2);
+ctx.fill();ctx.strokeStyle=OL;ctx.lineWidth=OW;ctx.stroke();
+
+// Weapon
+if(cn==='Warrior'||cn==='GameCharacter'){
+// Sword
+ctx.fillStyle='#B0BEC5';ctx.strokeStyle='#546E7A';ctx.lineWidth=1.2;
+ctx.fillRect(-2,13,4,22);ctx.strokeRect(-2,13,4,22);
+ctx.fillStyle=p.accent;ctx.fillRect(-5,12,10,3);ctx.strokeRect(-5,12,10,3);
+ctx.fillStyle='#ECEFF1';ctx.globalAlpha=0.4;ctx.fillRect(-0.5,14,1,18);ctx.globalAlpha=hurt&&Math.sin(t*30)>0?0.4:dead?0.4:1;
+}else if(cn==='Mage'){
+// Staff
+ctx.fillStyle='#5D4037';ctx.strokeStyle='#3E2723';ctx.lineWidth=1.2;
+ctx.fillRect(-1.5,10,3,28);ctx.strokeRect(-1.5,10,3,28);
+// Orb
+var orbGlow=0.5+Math.sin(t*3)*0.3;
+ctx.fillStyle=p.accent;ctx.globalAlpha=Math.min(orbGlow+0.4,1);
+ctx.beginPath();ctx.arc(0,9,6,0,Math.PI*2);ctx.fill();
+ctx.globalAlpha=Math.min(orbGlow*0.5,0.6);ctx.beginPath();ctx.arc(0,9,10,0,Math.PI*2);ctx.fill();
+ctx.globalAlpha=hurt&&Math.sin(t*30)>0?0.4:dead?0.4:1;
+ctx.fillStyle='#fff';ctx.globalAlpha=Math.min(0.6,ctx.globalAlpha);
+ctx.beginPath();ctx.arc(-1.5,7,2,0,Math.PI*2);ctx.fill();
+ctx.globalAlpha=hurt&&Math.sin(t*30)>0?0.4:dead?0.4:1;
+}else if(cn==='Archer'){
+// Bow
+ctx.strokeStyle='#6D4C41';ctx.lineWidth=3;
+ctx.beginPath();ctx.arc(4,18,14,-Math.PI*0.65,Math.PI*0.65);ctx.stroke();
+ctx.strokeStyle='#E0E0E0';ctx.lineWidth=1;
+ctx.beginPath();
+ctx.moveTo(4+14*Math.cos(-Math.PI*0.65),18+14*Math.sin(-Math.PI*0.65));
+ctx.lineTo(4+14*Math.cos(Math.PI*0.65),18+14*Math.sin(Math.PI*0.65));ctx.stroke();
+// Arrow nocked
+ctx.fillStyle='#8D6E63';ctx.fillRect(-4,17,16,2);
+ctx.fillStyle='#B0BEC5';ctx.beginPath();ctx.moveTo(12,15);ctx.lineTo(16,18);ctx.lineTo(12,21);ctx.closePath();ctx.fill();
+}else if(cn==='Healer'){
+// Staff with cross
+ctx.fillStyle='#5D4037';ctx.strokeStyle='#3E2723';ctx.lineWidth=1.2;
+ctx.fillRect(-1.5,10,3,24);ctx.strokeRect(-1.5,10,3,24);
+// Cross
+ctx.fillStyle=p.accent;ctx.strokeStyle=OL;ctx.lineWidth=1;
+ctx.fillRect(-1.5,6,3,8);ctx.strokeRect(-1.5,6,3,8);
+ctx.fillRect(-4.5,8,9,3);ctx.strokeRect(-4.5,8,9,3);
+// Glow
+var hGlow=0.3+Math.sin(t*2)*0.2;
+ctx.globalAlpha=Math.min(hGlow,0.5);ctx.fillStyle='#66BB6A';
+ctx.beginPath();ctx.arc(0,10,8,0,Math.PI*2);ctx.fill();
+ctx.globalAlpha=hurt&&Math.sin(t*30)>0?0.4:dead?0.4:1;
+}
+ctx.restore();
+
+// ─ HEAD ─
+ctx.fillStyle=p.skin;ctx.strokeStyle=OL;ctx.lineWidth=OW;
+ctx.beginPath();ctx.arc(0,-18,11,0,Math.PI*2);ctx.fill();ctx.stroke();
+
+// Headgear
+if(cn==='Warrior'){
+ctx.fillStyle=p.armor;ctx.strokeStyle=OL;ctx.lineWidth=OW;
+ctx.beginPath();ctx.arc(0,-20,11,Math.PI,0);ctx.fill();ctx.stroke();
+ctx.fillStyle=p.accent;rr(ctx,-11,-20,22,3,1);ctx.fill();ctx.stroke();
+// Visor
+ctx.fillStyle=p.armor;ctx.fillRect(-7,-16,14,3);ctx.strokeRect(-7,-16,14,3);
+}else if(cn==='Mage'){
+ctx.fillStyle=p.body;ctx.strokeStyle=OL;ctx.lineWidth=OW;
+ctx.beginPath();ctx.moveTo(-10,-18);ctx.lineTo(0,-42);ctx.lineTo(10,-18);ctx.closePath();ctx.fill();ctx.stroke();
+ctx.fillStyle=p.accent;rr(ctx,-12,-19,24,3,1);ctx.fill();ctx.stroke();
+// Star on hat
+ctx.fillStyle='#FFF176';ctx.beginPath();ctx.arc(2,-30,2.5,0,Math.PI*2);ctx.fill();
+}else if(cn==='Archer'){
+ctx.fillStyle=p.armor;ctx.strokeStyle=OL;ctx.lineWidth=OW;
+ctx.beginPath();ctx.arc(0,-20,11,Math.PI+0.3,-0.3);ctx.fill();ctx.stroke();
+// Feather
+ctx.fillStyle='#FFEB3B';
+ctx.beginPath();ctx.moveTo(7,-24);ctx.lineTo(9,-34);ctx.lineTo(11,-24);ctx.closePath();ctx.fill();
+ctx.strokeStyle=OL;ctx.stroke();
+}else if(cn==='Healer'){
+ctx.fillStyle=p.hair;ctx.strokeStyle=OL;ctx.lineWidth=OW;
+ctx.beginPath();ctx.arc(0,-21,10,Math.PI+0.4,-0.4);ctx.fill();ctx.stroke();
+// Halo
+ctx.strokeStyle=p.accent;ctx.lineWidth=2;
+ctx.globalAlpha=Math.min(0.5+Math.sin(t*2)*0.2,ctx.globalAlpha);
+ctx.beginPath();ctx.ellipse(0,-32,9,3,0,0,Math.PI*2);ctx.stroke();
+ctx.globalAlpha=hurt&&Math.sin(t*30)>0?0.4:dead?0.4:1;
+}else{
+ctx.fillStyle=p.hair;ctx.strokeStyle=OL;ctx.lineWidth=OW;
+ctx.beginPath();ctx.arc(0,-21,10,Math.PI+0.3,-0.3);ctx.fill();ctx.stroke();
+}
+
+// Eyes
+ctx.fillStyle='#fff';
+ctx.fillRect(-5,-20,4,4);ctx.fillRect(2,-20,4,4);
+ctx.fillStyle='#263238';
+ctx.fillRect(-4,-19,3,3);ctx.fillRect(3,-19,3,3);
+// Eye glints
+ctx.fillStyle='#fff';ctx.fillRect(-3.5,-19,1.5,1.5);ctx.fillRect(3.5,-19,1.5,1.5);
+
+// Mouth
+ctx.strokeStyle='#C62828';ctx.lineWidth=1.2;ctx.beginPath();
+if(ch.hp>ch.maxHp*0.3){ctx.arc(0,-11,3,0.2,Math.PI-0.2);}
+else{ctx.arc(0,-8,3,Math.PI+0.2,-0.2);}ctx.stroke();
+
+// Defend bubble
+if(defending){
+ctx.strokeStyle='rgba(100,181,246,0.5)';ctx.lineWidth=2;
+ctx.beginPath();ctx.arc(0,-2,28+Math.sin(t*4)*3,0,Math.PI*2);ctx.stroke();
+ctx.fillStyle='rgba(100,181,246,0.08)';ctx.fill();
+}
+
+ctx.restore();
+
+// ─ HP BAR ─
+if(ch.hp!==undefined&&ch.maxHp){
+var bw=40,bh=5,bx=sx-bw/2,by=sy-36+bob;
+ctx.fillStyle='rgba(0,0,0,0.5)';rr(ctx,bx-1,by-1,bw+2,bh+2,3);ctx.fill();
+ctx.strokeStyle='rgba(0,0,0,0.3)';ctx.lineWidth=1;ctx.stroke();
+var pct=Math.max(0,ch.hp/ch.maxHp);
+ctx.fillStyle=pct>0.5?'#4CAF50':pct>0.25?'#FF9800':'#F44336';
+if(pct>0)rr(ctx,bx,by,bw*pct,bh,2);ctx.fill();
+// HP text
+ctx.font='bold 7px "JetBrains Mono",monospace';ctx.textAlign='center';
+ctx.fillStyle='#fff';ctx.fillText(Math.max(0,ch.hp)+'/'+ch.maxHp,sx,by+bh-0.5);
+}
+
+// ─ NAME TAG ─
+ctx.font='bold 10px "JetBrains Mono",monospace';ctx.textAlign='center';
+var nw=ctx.measureText(ch.name).width;
+rr(ctx,sx-nw/2-5,sy+24+bob,nw+10,14,4);
+ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fill();
+ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=1;ctx.stroke();
+ctx.fillStyle=p.accent;ctx.fillText(ch.name,sx,sy+34+bob);
+}
+
+// ─── EFFECTS ───
+function drawFX(ctx,effects,t){
+effects.forEach(function(e){
+var age=t-e.st;if(age>e.dur)return;var p=age/e.dur;
+
+if(e.type==='slash'){
+ctx.save();ctx.translate(e.x,e.y);ctx.rotate(-0.7);ctx.globalAlpha=1-p;
+var len=50*Math.min(1,p*3);
+var g=ctx.createLinearGradient(-len/2,0,len/2,0);
+g.addColorStop(0,'transparent');g.addColorStop(0.5,'#fff');g.addColorStop(1,'transparent');
+ctx.strokeStyle=g;ctx.lineWidth=4-p*3;ctx.beginPath();ctx.moveTo(-len/2,0);ctx.lineTo(len/2,0);ctx.stroke();
+for(var i=0;i<8;i++){var a=(i/8)*Math.PI*2+p*4,rad=p*28;
+ctx.fillStyle=i%2?'#FFC107':'#fff';ctx.globalAlpha=(1-p)*0.8;
+ctx.beginPath();ctx.arc(Math.cos(a)*rad,Math.sin(a)*rad,2-p*1.5,0,Math.PI*2);ctx.fill();}
+ctx.restore();
+}
+
+else if(e.type==='fireball'){
+ctx.save();var tp=Math.min(1,p*1.8);
+var ex=e.x+(e.tx-e.x)*tp,ey=e.y+(e.ty-e.y)*tp-Math.sin(tp*Math.PI)*35;
+// Trail
+for(var i=0;i<8;i++){var ti=Math.max(0,tp-i*0.03);
+var tx2=e.x+(e.tx-e.x)*ti,ty2=e.y+(e.ty-e.y)*ti-Math.sin(ti*Math.PI)*35;
+ctx.globalAlpha=(1-i/8)*(1-p)*0.5;ctx.fillStyle=i<3?'#FF6F00':'#E65100';
+ctx.beginPath();ctx.arc(tx2,ty2,7-i*0.7,0,Math.PI*2);ctx.fill();}
+// Main fireball
+ctx.globalAlpha=1-Math.max(0,p-0.7)*3.3;
+var glow=ctx.createRadialGradient(ex,ey,0,ex,ey,16);
+glow.addColorStop(0,'#fff');glow.addColorStop(0.2,'#FFEB3B');glow.addColorStop(0.5,'#FF6F00');glow.addColorStop(0.8,'#E65100');glow.addColorStop(1,'transparent');
+ctx.fillStyle=glow;ctx.beginPath();ctx.arc(ex,ey,16,0,Math.PI*2);ctx.fill();
+// Impact explosion
+if(p>0.55){var ip=(p-0.55)/0.45;ctx.globalAlpha=(1-ip)*0.5;
+ctx.fillStyle='#FF6F00';ctx.beginPath();ctx.arc(e.tx,e.ty,ip*35,0,Math.PI*2);ctx.fill();
+for(var i=0;i<6;i++){var a=(i/6)*Math.PI*2+ip*2;
+ctx.fillStyle='#FFCA28';ctx.globalAlpha=(1-ip)*0.7;
+ctx.beginPath();ctx.arc(e.tx+Math.cos(a)*ip*25,e.ty+Math.sin(a)*ip*25,3-ip*2,0,Math.PI*2);ctx.fill();}}
+ctx.restore();
+}
+
+else if(e.type==='arrow'){
+ctx.save();var tp=Math.min(1,p*2.2);
+var ex=e.x+(e.tx-e.x)*tp,ey=e.y+(e.ty-e.y)*tp-Math.sin(tp*Math.PI)*25;
+var ang=Math.atan2((e.ty-e.y)-Math.cos(tp*Math.PI)*25*Math.PI,(e.tx-e.x));
+ctx.translate(ex,ey);ctx.rotate(ang);ctx.globalAlpha=1-Math.max(0,p-0.7)*3.3;
+// Arrow shaft
+ctx.fillStyle='#8D6E63';ctx.strokeStyle='#5D4037';ctx.lineWidth=1;
+ctx.fillRect(-12,-1.5,24,3);ctx.strokeRect(-12,-1.5,24,3);
+// Arrowhead
+ctx.fillStyle='#B0BEC5';ctx.strokeStyle='#546E7A';
+ctx.beginPath();ctx.moveTo(12,-4);ctx.lineTo(18,0);ctx.lineTo(12,4);ctx.closePath();ctx.fill();ctx.stroke();
+// Fletching
+ctx.fillStyle='#FFEB3B';
+ctx.beginPath();ctx.moveTo(-12,-4);ctx.lineTo(-8,0);ctx.lineTo(-12,4);ctx.closePath();ctx.fill();
+// Impact
+if(p>0.6){var ip=(p-0.6)/0.4;
+ctx.globalAlpha=(1-ip)*0.8;
+for(var i=0;i<4;i++){ctx.fillStyle='#8D6E63';
+ctx.beginPath();ctx.arc(6+i*3*ip,(-1+i*4*ip-i*2),1.5,0,Math.PI*2);ctx.fill();}}
+ctx.restore();
+}
+
+else if(e.type==='heal'){
+ctx.save();ctx.globalAlpha=1-p;
+for(var i=0;i<10;i++){var a=(i/10)*Math.PI*2+t*2,rad=14+p*18;
+ctx.fillStyle=i%2===0?'#66BB6A':'#43A047';ctx.globalAlpha=(1-p)*0.8;
+ctx.beginPath();ctx.arc(e.x+Math.cos(a)*rad,e.y-p*30+Math.sin(a)*6,3-p*1.5,0,Math.PI*2);ctx.fill();}
+// Rising cross symbols
+for(var i=0;i<3;i++){
+ctx.fillStyle='#4CAF50';ctx.globalAlpha=(1-p)*0.9;
+var cy=e.y-18-p*25-i*12;var cx2=e.x+Math.sin(i*2.5)*8;
+ctx.fillRect(cx2-1.5,cy-5,3,10);ctx.fillRect(cx2-5,cy-1.5,10,3);
+}
+// Ring
+ctx.strokeStyle='#66BB6A';ctx.lineWidth=2;ctx.globalAlpha=(1-p)*0.4;
+ctx.beginPath();ctx.arc(e.x,e.y-5,20+p*15,0,Math.PI*2);ctx.stroke();
+ctx.restore();
+}
+
+else if(e.type==='shield'){
+ctx.save();
+var sp=Math.min(1,p*3);
+ctx.strokeStyle='rgba(100,181,246,'+(1-p)*0.7+')';ctx.lineWidth=3-p*2;
+ctx.beginPath();ctx.arc(e.x,e.y-5,sp*25,0,Math.PI*2);ctx.stroke();
+ctx.fillStyle='rgba(100,181,246,'+(1-p)*0.1+')';ctx.fill();
+// Sparkles
+for(var i=0;i<6;i++){var a=(i/6)*Math.PI*2+t*3;
+ctx.fillStyle='rgba(100,181,246,'+(1-p)*0.8+')';
+ctx.beginPath();ctx.arc(e.x+Math.cos(a)*sp*25,e.y-5+Math.sin(a)*sp*25,2-p,0,Math.PI*2);ctx.fill();}
+ctx.restore();
+}
+
+else if(e.type==='damage'){
+ctx.save();ctx.globalAlpha=1-p;
+ctx.font='bold '+(18+p*6)+'px "Orbitron",sans-serif';ctx.textAlign='center';
+ctx.strokeStyle='rgba(0,0,0,0.7)';ctx.lineWidth=3;ctx.fillStyle=e.color||'#F44336';
+var dy=e.y-p*40,txt=(e.heal?'+':'-')+e.value;
+var scale=p<0.1?p*10:1;
+ctx.translate(e.x,dy);ctx.scale(scale,scale);
+ctx.strokeText(txt,0,0);ctx.fillText(txt,0,0);ctx.restore();
+}
+});
+}
+
+// ─── MAIN RENDER ───
+function render(ctx,w,h,chars,effects,t){
+ctx.clearRect(0,0,w,h);
+drawSky(ctx,w,h,t);
+
+var ox=w*0.5,oy=h*0.1;
+var items=[];
+for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++){
+var s=toScr(c,r,ox,oy);
+(function(s2,r2,c2){items.push({d:r2+c2,z:0,fn:function(){drawTile(ctx,s2.x,s2.y,MAP[r2][c2],t);}});})(s,r,c);
+}
+DECOS.forEach(function(d){var s=toScr(d.c,d.r,ox,oy);
+items.push({d:d.r+d.c,z:1,fn:function(){
+if(d.t==='tree')drawTree(ctx,s.x,s.y,t);
+else if(d.t==='bush')drawBush(ctx,s.x,s.y,t);
+else if(d.t==='flower')drawFlower(ctx,s.x,s.y,t);
+else if(d.t==='campfire')drawCampfire(ctx,s.x,s.y,t);
+else drawRock(ctx,s.x,s.y);
+}});
+});
+chars.forEach(function(ch){
+var s=toScr(ch.col,ch.row,ox,oy);
+if(ch.screenX===undefined){ch.screenX=s.x;ch.screenY=s.y;}
+ch.screenX+=(s.x-ch.screenX)*0.08;ch.screenY+=(s.y-ch.screenY)*0.08;
+ch.walking=Math.abs(s.x-ch.screenX)>1.5||Math.abs(s.y-ch.screenY)>1.5;
+items.push({d:ch.row+ch.col,z:2,fn:function(){drawChar(ctx,ch,t);}});
+});
+items.sort(function(a,b){return a.d-b.d||a.z-b.z;});
+items.forEach(function(it){it.fn();});
+drawFX(ctx,effects.filter(function(e){return(t-e.st)<=e.dur;}),t);
+}
+
+return{render:render,toScr:toScr,COLS:COLS,ROWS:ROWS};
+})();
+</script>
+
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script type="text/babel">
+var useState=React.useState,useEffect=React.useEffect,useRef=React.useRef,useCallback=React.useCallback;
+
+// ═══════════════════════════════════════════════════════════════
+// ENHANCED JAVA PARSER — 1:1 Code-to-Game Mapping
+// ═══════════════════════════════════════════════════════════════
+function parseJava(code){
+var R={classes:[],objects:[],calls:[],collections:[],inheritance:{},interfaces:[],impls:{},errors:[]};
+try{
+var cl=code.replace(/\/\/.*$/gm,'').replace(/\/\*[\s\S]*?\*\//g,'');
+
+// Interfaces
+var ifRx=/interface\s+(\w+)\s*\{([\s\S]*?)\n\}/g,ifm;
+while((ifm=ifRx.exec(cl))!==null){
+var ifName=ifm[1],ifBody=ifm[2],ifMeths=[];
+var imRx=/(?:public\s+)?(?:void|int|String|double|boolean)\s+(\w+)\s*\(([^)]*)\)\s*;/g,imm;
+while((imm=imRx.exec(ifBody))!==null)ifMeths.push({name:imm[1],params:imm[2].trim()});
+R.interfaces.push({name:ifName,methods:ifMeths});
+}
+
+// Classes
+var clsRx=/(?:(abstract)\s+)?class\s+(\w+)(?:\s+extends\s+(\w+))?(?:\s+implements\s+([\w,\s]+))?\s*\{([\s\S]*?)\n\}/g,m;
+while((m=clsRx.exec(cl))!==null){
+var isAbstract=!!m[1],nm=m[2],par=m[3]||null,implStr=m[4]||'',body=m[5],attrs=[],meths=[];
+
+// Interfaces implemented
+if(implStr.trim()){
+var impls=implStr.split(',').map(function(s){return s.trim();});
+R.impls[nm]=impls;
+}
+if(par)R.inheritance[nm]=par;
+
+// Attributes with access modifiers
+var aRx=/(?:(private|protected|public)\s+)?(int|String|double|boolean|float)\s+(\w+)\s*(?:=\s*([^;]+))?\s*;/g,am;
+while((am=aRx.exec(body))!==null)attrs.push({type:am[2],name:am[3],value:am[4]?am[4].trim():null,access:am[1]||'default'});
+
+// Methods (including abstract)
+var mRx=/(?:(public|private|protected)\s+)?(?:(abstract)\s+)?(?:void|int|String|double|boolean)\s+(\w+)\s*\(([^)]*)\)\s*(?:\{([^}]*)\}|;)/g,mm;
+while((mm=mRx.exec(body))!==null)meths.push({name:mm[3],params:mm[4].trim(),body:mm[5]?mm[5].trim():'',isAbstract:!!mm[2],access:mm[1]||'public'});
+
+// Constructor with field mapping
+var ctRx=new RegExp(nm+'\\s*\\(([^)]*)\\)\\s*\\{([^}]*)\\}','g'),cm2=ctRx.exec(body);
+var ctor=null,fieldMap={};
+if(cm2){
+ctor={params:cm2[1].trim(),body:cm2[2].trim()};
+// Parse constructor params
+var paramList=cm2[1].trim().split(',').map(function(s){return s.trim();}).filter(Boolean);
+var paramNames=paramList.map(function(p){var parts=p.split(/\s+/);return parts[parts.length-1];});
+// Parse this.field = param assignments
+var asRx=/this\.(\w+)\s*=\s*(\w+)\s*;/g,asm;
+while((asm=asRx.exec(cm2[2]))!==null){
+var fName=asm[1],pName=asm[2];
+var pIdx=paramNames.indexOf(pName);
+if(pIdx>=0)fieldMap[fName]=pIdx;
+}
+ctor.fieldMap=fieldMap;
+ctor.paramNames=paramNames;
+}
+
+// Getter/setter detection
+var getters=[],setters=[];
+meths.forEach(function(mt){
+if(/^get[A-Z]/.test(mt.name)){
+var fn=mt.name.charAt(3).toLowerCase()+mt.name.slice(4);
+getters.push({method:mt.name,field:fn});
+}
+if(/^set[A-Z]/.test(mt.name)){
+var fn=mt.name.charAt(3).toLowerCase()+mt.name.slice(4);
+setters.push({method:mt.name,field:fn});
+}
+});
+
+R.classes.push({name:nm,parent:par,attrs:attrs,methods:meths,ctor:ctor,isAbstract:isAbstract,getters:getters,setters:setters});
+}
+
+// Object instantiation
+var oRx=/(\w+)\s+(\w+)\s*=\s*new\s+(\w+)\s*\(([^)]*)\)\s*;/g;
+while((m=oRx.exec(cl))!==null){
+var args=m[4].trim(),pa=[];
+if(args){var buf='',inS=false;for(var i=0;i<args.length;i++){var ch=args[i];if(ch==='"'){inS=!inS;continue;}if(ch===','&&!inS){pa.push(buf.trim());buf='';continue;}buf+=ch;}if(buf.trim())pa.push(buf.trim());}
+R.objects.push({type:m[1],name:m[2],className:m[3],args:pa});
+}
+
+// Method calls
+var cRx=/(\w+)\.(\w+)\s*\(([^)]*)\)\s*;/g;
+while((m=cRx.exec(cl))!==null){
+if(m[1]==='System')continue;
+R.calls.push({obj:m[1],method:m[2],args:m[3].trim()});
+}
+
+// System.out.println
+var spRx=/System\.out\.println\s*\(([^)]*)\)\s*;/g;
+while((m=spRx.exec(cl))!==null)R.calls.push({obj:'__sysout__',method:'println',args:m[1].trim()});
+
+// Collections
+var lRx=/(?:ArrayList|List)\s*<\s*(\w+)\s*>\s+(\w+)\s*=\s*new\s+ArrayList/g;
+while((m=lRx.exec(cl))!==null)R.collections.push({elemType:m[1],name:m[2]});
+
+// For-each loops
+var feRx=/for\s*\(\s*(\w+)\s+(\w+)\s*:\s*(\w+)\s*\)\s*\{([^}]*)\}/g;
+while((m=feRx.exec(cl))!==null){
+var icRx2=/(\w+)\.(\w+)\s*\(([^)]*)\)\s*;/g,ic;
+while((ic=icRx2.exec(m[4]))!==null){
+if(ic[1]===m[2])R.calls.push({obj:'__fe__',coll:m[3],iter:m[2],method:ic[2],args:ic[3].trim(),isLoop:true});
+}
+}
+}catch(e){R.errors.push(e.message);}return R;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ACTION BUILDER — 1:1 Mapping from Parsed Java to Game Actions
+// ═══════════════════════════════════════════════════════════════
+function buildActions(parsed){
+var actions=[],cm={},si=0;
+var spotsL=[{c:3,r:3},{c:3,r:5},{c:2,r:4},{c:4,r:2}];
+var spotsR=[{c:8,r:4},{c:8,r:6},{c:9,r:3},{c:7,r:7}];
+
+// Resolve all methods for a class (walk inheritance chain)
+function resolveClass(className){
+var allM=[],allA=[],cls=parsed.classes.find(function(c){return c.name===className;});
+var chain=[];var cur=cls;
+while(cur){chain.unshift(cur);var pn=cur.parent;cur=pn?parsed.classes.find(function(c){return c.name===pn;}):null;}
+chain.forEach(function(c){
+c.methods.forEach(function(m){allM.push(m.name);});
+allA=allA.concat(c.attrs);
+});
+return{methods:allM,attrs:allA,cls:cls,chain:chain};
+}
+
+parsed.objects.forEach(function(obj){
+var res=resolveClass(obj.className);
+var cls=res.cls;
+var ctor=null;
+// Find constructor (walk chain)
+res.chain.forEach(function(c){if(c.ctor)ctor=c.ctor;});
+if(cls&&cls.ctor)ctor=cls.ctor;
+
+// Resolve constructor args to fields using fieldMap
+var hp=100,atk=15,nameStr=obj.name,mana=50,def=5,arrows=10;
+if(ctor&&ctor.fieldMap){
+var fm=ctor.fieldMap;
+Object.keys(fm).forEach(function(field){
+var idx=fm[field];
+if(idx<obj.args.length){
+var val=obj.args[idx];
+if(field==='name'||field==='characterName'||field==='n'){nameStr=val;}
+else if(field==='health'||field==='hp'||field==='hitPoints'){var v=parseInt(val);if(!isNaN(v))hp=v;}
+else if(field==='attackPower'||field==='attack'||field==='atk'||field==='damage'||field==='power'){var v=parseInt(val);if(!isNaN(v))atk=v;}
+else if(field==='mana'||field==='mp'||field==='magicPower'){var v=parseInt(val);if(!isNaN(v))mana=v;}
+else if(field==='defense'||field==='def'||field==='armor'){var v=parseInt(val);if(!isNaN(v))def=v;}
+else if(field==='arrows'||field==='arrowCount'){var v=parseInt(val);if(!isNaN(v))arrows=v;}
+}
+});
+}else{
+// Fallback: positional
+if(obj.args.length>=1&&isNaN(obj.args[0]))nameStr=obj.args[0];
+if(obj.args.length>=2&&!isNaN(obj.args[1]))hp=parseInt(obj.args[1]);
+if(obj.args.length>=3&&!isNaN(obj.args[2]))atk=parseInt(obj.args[2]);
+}
+
+// Also check attr default values
+res.attrs.forEach(function(a){
+if(a.value&&obj.args.length<2){
+if((a.name==='health'||a.name==='hp')&&!isNaN(parseInt(a.value)))hp=parseInt(a.value);
+if((a.name==='attackPower'||a.name==='attack')&&!isNaN(parseInt(a.value)))atk=parseInt(a.value);
+}
+});
+
+var sp=si%2===0?spotsL[Math.floor(si/2)%spotsL.length]:spotsR[Math.floor(si/2)%spotsR.length];
+si++;
+cm[obj.name]={className:obj.className,col:sp.c,row:sp.r,hp:hp,maxHp:hp,atk:atk,mana:mana,def:def,arrows:arrows,methods:res.methods,nameStr:nameStr};
+actions.push({type:'spawn',name:obj.name,data:cm[obj.name],delay:si*500});
+});
+
+var colMem={};parsed.collections.forEach(function(c){colMem[c.name]=[];});
+var delay=parsed.objects.length*500+300;
+
+parsed.calls.forEach(function(call){
+// System.out.println
+if(call.obj==='__sysout__'){
+var msg=call.args.replace(/^"|"$/g,'');
+actions.push({type:'log',text:'> '+msg,color:'#B0BEC5',delay:delay});delay+=300;return;
+}
+// Collection add
+if(call.method==='add'&&colMem[call.obj]!==undefined){
+colMem[call.obj].push(call.args);
+actions.push({type:'log',text:call.obj+'.add('+call.args+')',color:'#42A5F5',delay:delay});delay+=200;return;
+}
+// For-each loop
+if(call.isLoop&&call.obj==='__fe__'){
+var mem=colMem[call.coll]||[];
+mem.forEach(function(mn,i){actions.push({type:'action',name:mn,method:call.method,args:call.args,delay:delay+i*700});});
+delay+=mem.length*700+200;return;
+}
+// Move
+if(call.method==='move'||call.method==='moveTo'){
+var co=call.args.split(',').map(function(s){return parseInt(s.trim());});
+if(co.length===2&&!isNaN(co[0])&&!isNaN(co[1])){
+actions.push({type:'move',name:call.obj,col:co[0],row:co[1],delay:delay});delay+=800;}return;
+}
+// Attack (exact damage from attackPower)
+if(call.method==='attack'){actions.push({type:'attack',name:call.obj,target:call.args,delay:delay});delay+=900;return;}
+// Cast spell
+if(call.method==='castSpell'){actions.push({type:'spell',name:call.obj,target:call.args,delay:delay});delay+=1100;return;}
+// Heal
+if(call.method==='heal'){actions.push({type:'heal',name:call.obj,target:call.args,delay:delay});delay+=900;return;}
+// Defend
+if(call.method==='defend'){actions.push({type:'defend',name:call.obj,delay:delay});delay+=600;return;}
+// Shoot
+if(call.method==='shoot'){actions.push({type:'shoot',name:call.obj,target:call.args,delay:delay});delay+=1000;return;}
+// Setters (encapsulation)
+if(/^set[A-Z]/.test(call.method)){
+var field=call.method.charAt(3).toLowerCase()+call.method.slice(4);
+var val=parseInt(call.args)||call.args;
+actions.push({type:'setter',name:call.obj,field:field,value:val,delay:delay});delay+=400;return;
+}
+// specialAbility / specialMove
+if(call.method==='specialAbility'||call.method==='specialMove'){
+actions.push({type:'special',name:call.obj,target:call.args,delay:delay});delay+=1000;return;
+}
+// Generic method call
+actions.push({type:'action',name:call.obj,method:call.method,args:call.args,delay:delay});delay+=500;
+});
+return actions;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// QUESTS — 10 Chapters
+// ═══════════════════════════════════════════════════════════════
+var QUESTS=[
+// ─── CHAPTER 1: Classes & Attributes ───
+{id:1,title:"Chapter 1: The Blueprint",concept:"Classes & Attributes",
+description:"Every warrior begins as an idea — a CLASS. Define a Warrior class with three attributes: name (String), health (int), and attackPower (int). This is the blueprint that all warriors will be built from.",
+hints:[
+"Think of a class like an architect's blueprint. What properties does every warrior share? A name to identify them, a measure of their vitality, and their combat strength.",
+"A class is declared with 'class ClassName { }'. Inside the braces, you list each property with its type first, then its name, ending with a semicolon.",
+"You need three lines inside the class. Remember: text values use String, whole numbers use int. Each attribute is declared as: type name;"
+],
+starter:"// A class is a blueprint for creating warriors\n// Define: name (String), health (int), attackPower (int)\n\nclass Warrior {\n    \n}",
+validate:function(p){var c=p.classes.find(function(c){return c.name==='Warrior';});
+if(!c)return{pass:false,msg:"Create a class called 'Warrior'"};
+var n=c.attrs.map(function(a){return a.name;});
+if(n.indexOf('name')<0)return{pass:false,msg:"Add a 'name' attribute (String)"};
+if(n.indexOf('health')<0)return{pass:false,msg:"Add a 'health' attribute (int)"};
+if(n.indexOf('attackPower')<0)return{pass:false,msg:"Add an 'attackPower' attribute (int)"};
+return{pass:true,msg:"Blueprint forged! Your Warrior class is ready."};}
+},
+
+// ─── CHAPTER 2: Constructors ───
+{id:2,title:"Chapter 2: The Constructor",concept:"Constructors",
+description:"A constructor is the special method that runs when a new warrior is born. It takes parameters and uses 'this' to assign them to the object's fields. Add a constructor to Warrior.",
+hints:[
+"A constructor is like a birth certificate — it runs exactly once when an object is created and sets up its initial state. It has the same name as the class.",
+"The constructor is declared inside the class with the same name: ClassName(parameters) { body }. Inside the body, use 'this.fieldName = parameterName' to assign each value.",
+"Your constructor needs to accept three parameters matching your attributes. Inside, write three assignment lines using 'this' to distinguish the field from the parameter."
+],
+starter:"class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    // Add a constructor that takes (String name, int health, int attackPower)\n    // and assigns each parameter to the matching field using 'this'\n    \n}",
+validate:function(p){var c=p.classes.find(function(c){return c.name==='Warrior';});
+if(!c)return{pass:false,msg:"Keep your Warrior class!"};
+if(!c.ctor)return{pass:false,msg:"Add a constructor: Warrior(parameters) { assignments }"};
+if(!c.ctor.fieldMap||!c.ctor.fieldMap.name)return{pass:false,msg:"Use 'this.name = name' inside the constructor"};
+if(!c.ctor.fieldMap.health)return{pass:false,msg:"Use 'this.health = health' inside the constructor"};
+if(!c.ctor.fieldMap.attackPower)return{pass:false,msg:"Use 'this.attackPower = attackPower' inside the constructor"};
+return{pass:true,msg:"Constructor forged! Now warriors can be born with unique stats!"};}
+},
+
+// ─── CHAPTER 3: Objects ───
+{id:3,title:"Chapter 3: Summoning Warriors",concept:"Objects — Instances",
+description:"A class alone does nothing — you need OBJECTS. Use 'new' to create two warriors. Give them your own names and stats! Each one becomes a unique character in the arena.",
+hints:[
+"You've built the blueprint. Now imagine stamping out real warriors from it. Each one gets its own name, health, and power — they are independent copies.",
+"The 'new' keyword creates an instance. The syntax is: ClassName varName = new ClassName(arg1, arg2, arg3); You need two different warriors.",
+"Create two warriors with different values. The first argument becomes the name that appears in the arena. Try different health and attack values to see the difference!"
+],
+starter:"class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n}\n\n// Create TWO Warrior objects with your own names and stats!\n// Example pattern: Type varName = new Type(\"Name\", hp, atk);\n",
+validate:function(p){var c=p.classes.find(function(c){return c.name==='Warrior';});
+if(!c)return{pass:false,msg:"Keep your Warrior class!"};
+var ws=p.objects.filter(function(o){return o.className==='Warrior';});
+if(ws.length<1)return{pass:false,msg:"Create a Warrior object using 'new'"};
+if(ws.length<2)return{pass:false,msg:"Good! Now create a second warrior with different stats."};
+return{pass:true,msg:"Two warriors materialise in the arena!"};}
+},
+
+// ─── CHAPTER 4: Methods ───
+{id:4,title:"Chapter 4: Battle Cry",concept:"Methods — Behaviour",
+description:"Warriors need abilities! Add an attack(Warrior target) method and a defend() method to the Warrior class. Then call hero.attack(enemy) and hero.defend() to see them fight!",
+hints:[
+"Methods are the verbs of a class — they define what an object can DO. An attack needs a target, but defending is something you do alone.",
+"Methods are declared inside the class with: returnType methodName(parameters) { body }. Use 'void' when the method doesn't return a value. Then call them on your objects outside the class.",
+"The attack method should take a Warrior parameter. For the body, any valid statement works. Then call: yourWarrior.attack(otherWarrior); and yourWarrior.defend();"
+],
+starter:"class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    // Add: public void attack(Warrior target) { ... }\n    // Add: public void defend() { ... }\n    \n}\n\nWarrior hero = new Warrior(\"Aldric\", 100, 25);\nWarrior enemy = new Warrior(\"Grok\", 80, 20);\n\n// Call attack and defend on your warriors!\n",
+validate:function(p){var c=p.classes.find(function(c){return c.name==='Warrior';});
+if(!c)return{pass:false,msg:"Keep your Warrior class!"};
+if(!c.methods.find(function(m){return m.name==='attack';}))return{pass:false,msg:"Add an attack(Warrior target) method"};
+if(!c.methods.find(function(m){return m.name==='defend';}))return{pass:false,msg:"Add a defend() method"};
+var ac=p.calls.find(function(c2){return c2.method==='attack';});
+if(!ac)return{pass:false,msg:"Call attack! e.g. hero.attack(enemy);"};
+var dc=p.calls.find(function(c2){return c2.method==='defend';});
+if(!dc)return{pass:false,msg:"Call defend! e.g. hero.defend();"};
+return{pass:true,msg:"Battle engaged! Your warriors fight with the exact power you gave them!"};}
+},
+
+// ─── CHAPTER 5: Encapsulation ───
+{id:5,title:"Chapter 5: Guarded Secrets",concept:"Encapsulation — Private & Getters/Setters",
+description:"In real battles, enemies can't just change your health directly! Make all attributes 'private' and add getHealth() and setHealth(int h) methods. Then use setHealth() to buff a warrior!",
+hints:[
+"Encapsulation is about protection. Imagine if any enemy could just set your health to 0 — that's not fair! The 'private' keyword restricts direct access from outside the class.",
+"Put 'private' before each attribute declaration. Then create methods that provide controlled access: a 'getter' returns the value, a 'setter' changes it with validation.",
+"Make each field private. Add 'public int getHealth()' that returns health, and 'public void setHealth(int h)' that sets it. Then call setHealth() on a warrior to change their HP!"
+],
+starter:"class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    // 1. Make ALL attributes private\n    // 2. Add: public int getHealth() { return this.health; }\n    // 3. Add: public void setHealth(int h) { this.health = h; }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n    public void defend() {\n        System.out.println(\"Shield up!\");\n    }\n}\n\nWarrior hero = new Warrior(\"Aldric\", 100, 25);\nWarrior enemy = new Warrior(\"Grok\", 80, 20);\n\n// Use setHealth to buff your hero!\n// hero.setHealth(150);\n",
+validate:function(p){var c=p.classes.find(function(c){return c.name==='Warrior';});
+if(!c)return{pass:false,msg:"Keep your Warrior class!"};
+var priv=c.attrs.filter(function(a){return a.access==='private';});
+if(priv.length<3)return{pass:false,msg:"Make ALL attributes private ("+priv.length+"/3 so far)"};
+if(!c.methods.find(function(m){return m.name==='getHealth';}))return{pass:false,msg:"Add a getHealth() method that returns health"};
+if(!c.methods.find(function(m){return m.name==='setHealth';}))return{pass:false,msg:"Add a setHealth(int h) method"};
+var sc=p.calls.find(function(c2){return c2.method==='setHealth';});
+if(!sc)return{pass:false,msg:"Use setHealth() on a warrior! e.g. hero.setHealth(150);"};
+return{pass:true,msg:"Data protected! Your warriors' stats are now safely encapsulated!"};}
+},
+
+// ─── CHAPTER 6: Inheritance ───
+{id:6,title:"Chapter 6: Arcane Power",concept:"Inheritance — extends",
+description:"A Mage inherits everything from Warrior but adds mana and castSpell(). Create a Mage class that EXTENDS Warrior, add an int mana attribute and a castSpell method, then summon a Mage!",
+hints:[
+"A Mage IS a Warrior with extra powers. Inheritance lets you build on existing classes without rewriting everything. The child automatically gets all the parent's fields and methods.",
+"Use the 'extends' keyword: class ChildClass extends ParentClass { new stuff }. The child only needs to declare what's NEW or DIFFERENT.",
+"Create class Mage extends Warrior with an 'int mana' attribute and a 'castSpell' method. Add a constructor, then create a Mage with 'new Mage(...)'"
+],
+starter:"class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n    public void defend() {\n        System.out.println(\"Shield up!\");\n    }\n}\n\n// Create: class Mage extends Warrior { int mana; castSpell(...) }\n\nWarrior hero = new Warrior(\"Aldric\", 100, 25);\n// Create a Mage object too!\n",
+validate:function(p){var mg=p.classes.find(function(c){return c.name==='Mage';});
+if(!mg)return{pass:false,msg:"Create a class called 'Mage'"};
+if(mg.parent!=='Warrior')return{pass:false,msg:"Mage should extend Warrior"};
+if(!mg.attrs.find(function(a){return a.name==='mana';}))return{pass:false,msg:"Add 'mana' (int) to Mage"};
+if(!mg.methods.find(function(m){return m.name==='castSpell';}))return{pass:false,msg:"Add a castSpell() method to Mage"};
+var mo=p.objects.find(function(o){return o.className==='Mage';});
+if(!mo)return{pass:false,msg:"Summon a Mage! Create one with 'new Mage(...)'"};
+return{pass:true,msg:"A Mage materialises with arcane power! Inheritance unlocked!"};}
+},
+
+// ─── CHAPTER 7: Polymorphism ───
+{id:7,title:"Chapter 7: Many Forms",concept:"Polymorphism — Override",
+description:"Override attack() in Mage so it behaves differently — magical instead of physical! Call attack() on both a Warrior and Mage to see polymorphism: same method name, completely different action!",
+hints:[
+"Polymorphism means 'many forms'. When you call attack() on a Warrior, they swing a sword. When you call attack() on a Mage, they should cast a magical blast. Same name, different behavior!",
+"To override, write the method again in the child class with the exact same signature (return type, name, parameters). The child's version replaces the parent's for objects of that type.",
+"Define 'public void attack(Warrior target)' inside Mage with a different body. Then create one Warrior and one Mage, and call attack() on both targeting an enemy."
+],
+starter:"class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n    public void defend() {\n        System.out.println(\"Shield up!\");\n    }\n}\n\nclass Mage extends Warrior {\n    int mana;\n\n    Mage(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    // Override attack() here — make it magical!\n    \n    public void castSpell(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nWarrior hero = new Warrior(\"Aldric\", 100, 25);\nMage wizard = new Mage(\"Elara\", 80, 35);\nWarrior enemy = new Warrior(\"Grok\", 120, 20);\n\n// Call attack() on BOTH hero and wizard!\n",
+validate:function(p){var mg=p.classes.find(function(c){return c.name==='Mage';});
+if(!mg)return{pass:false,msg:"Keep the Mage class"};
+if(!mg.methods.find(function(m){return m.name==='attack';}))return{pass:false,msg:"Override attack() inside Mage"};
+var calls=p.calls.filter(function(c){return c.method==='attack';});
+var callers=calls.map(function(c){return c.obj;});
+var wAtk=p.objects.some(function(o){return o.className==='Warrior'&&callers.indexOf(o.name)>=0;});
+var mAtk=p.objects.some(function(o){return o.className==='Mage'&&callers.indexOf(o.name)>=0;});
+if(!wAtk||!mAtk)return{pass:false,msg:"Call attack() on both a Warrior AND a Mage"};
+return{pass:true,msg:"Polymorphism! Sword slash vs magic blast — same method, different power!"};}
+},
+
+// ─── CHAPTER 8: The Archer ───
+{id:8,title:"Chapter 8: The Ranger",concept:"Subclass Hierarchy",
+description:"Not all heroes fight up close! Create an Archer class that extends Warrior. Give it 'int arrowCount' and a shoot(Warrior target) method. Then summon an Archer and shoot an enemy!",
+hints:[
+"You've already created one subclass (Mage). Now create another branch of the family tree. An Archer fights at range with arrows instead of swords or spells.",
+"Same pattern as Mage: class Archer extends Warrior { new attributes and methods }. Think about what makes an archer unique — they have ammunition that can run out.",
+"Archer needs 'int arrowCount' as an attribute and 'public void shoot(Warrior target)' as a method. Don't forget the constructor and creating an object with 'new'!"
+],
+starter:"class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nclass Mage extends Warrior {\n    int mana;\n    Mage(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n    public void castSpell(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\n// Create: class Archer extends Warrior\n// Add: int arrowCount, shoot(Warrior target)\n\nWarrior hero = new Warrior(\"Aldric\", 100, 25);\nMage wizard = new Mage(\"Elara\", 80, 35);\n// Create an Archer and shoot an enemy!\n",
+validate:function(p){var ar=p.classes.find(function(c){return c.name==='Archer';});
+if(!ar)return{pass:false,msg:"Create a class called 'Archer'"};
+if(ar.parent!=='Warrior')return{pass:false,msg:"Archer should extend Warrior"};
+if(!ar.attrs.find(function(a){return a.name==='arrowCount'||a.name==='arrows';}))return{pass:false,msg:"Add arrowCount (int) to Archer"};
+if(!ar.methods.find(function(m){return m.name==='shoot';}))return{pass:false,msg:"Add a shoot() method to Archer"};
+var ao=p.objects.find(function(o){return o.className==='Archer';});
+if(!ao)return{pass:false,msg:"Create an Archer object!"};
+var sc=p.calls.find(function(c){return c.method==='shoot';});
+if(!sc)return{pass:false,msg:"Call shoot() on your Archer!"};
+return{pass:true,msg:"Arrow flies true! The class hierarchy grows — Warrior, Mage, and Archer!"};}
+},
+
+// ─── CHAPTER 9: Abstract & Interfaces ───
+{id:9,title:"Chapter 9: Sacred Contracts",concept:"Abstract Classes & Interfaces",
+description:"Make GameCharacter an abstract class with an abstract specialAbility() method. Create a Healable interface with heal(). Make your Mage implement Healable. Each class defines its own specialAbility!",
+hints:[
+"Some blueprints should never be built directly — they're too vague. An abstract class is a template that says 'every child MUST provide these abilities', but doesn't define them itself.",
+"The 'abstract' keyword on a class prevents direct instantiation. An abstract method has no body — just a signature ending with a semicolon. An 'interface' is a contract: any class that 'implements' it must provide all listed methods.",
+"Declare 'abstract class GameCharacter' with 'abstract void specialAbility()'. Create 'interface Healable' with 'void heal(int amount)'. Then make Mage extend GameCharacter and implement Healable, providing both method bodies."
+],
+starter:"// Create: abstract class GameCharacter with\n//   String name, int health, int attackPower\n//   constructor, attack method\n//   abstract void specialAbility()\n\n// Create: interface Healable { void heal(int amount); }\n\n// Make Mage extend GameCharacter AND implement Healable\n// Mage must override specialAbility() and heal()\n\n// Create a Mage and call specialAbility() and heal()!\n",
+validate:function(p){
+var gc=p.classes.find(function(c){return c.name==='GameCharacter';});
+if(!gc)return{pass:false,msg:"Create an abstract class called 'GameCharacter'"};
+if(!gc.isAbstract)return{pass:false,msg:"GameCharacter should be abstract"};
+var absM=gc.methods.find(function(m){return m.name==='specialAbility'&&m.isAbstract;});
+if(!absM)return{pass:false,msg:"Add: abstract void specialAbility(); to GameCharacter"};
+var hi=p.interfaces.find(function(i){return i.name==='Healable';});
+if(!hi)return{pass:false,msg:"Create an interface called 'Healable'"};
+if(!hi.methods.find(function(m){return m.name==='heal';}))return{pass:false,msg:"Add heal() method to Healable interface"};
+var mg=p.classes.find(function(c){return c.name==='Mage';});
+if(!mg)return{pass:false,msg:"Create a Mage class"};
+if(!mg.methods.find(function(m){return m.name==='specialAbility';}))return{pass:false,msg:"Mage must implement specialAbility()"};
+if(!mg.methods.find(function(m){return m.name==='heal';}))return{pass:false,msg:"Mage must implement heal() from Healable"};
+var mo=p.objects.find(function(o){return o.className==='Mage';});
+if(!mo)return{pass:false,msg:"Create a Mage object!"};
+return{pass:true,msg:"Contracts fulfilled! Abstract classes and interfaces mastered!"};}
+},
+
+// ─── CHAPTER 10: Collections & Grand Battle ───
+{id:10,title:"Chapter 10: The Grand Battle",concept:"Collections — ArrayList",
+description:"Assemble your party! Create an ArrayList<Warrior> called 'party', add at least 3 heroes (mix of Warrior, Mage, Archer), then use a for-each loop to make everyone attack an enemy. Victory!",
+hints:[
+"Managing heroes one by one gets tedious. A collection lets you group them and command them all at once — like a general ordering a charge!",
+"ArrayList stores multiple objects in order. You can add, remove, and loop through them. The for-each loop visits every element without needing an index.",
+"Declare the list, add your heroes, create an enemy, then use: for (Warrior member : party) { member.attack(enemy); } to command everyone at once."
+],
+starter:"class Warrior {\n    String name;\n    int health;\n    int attackPower;\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nclass Mage extends Warrior {\n    int mana;\n    Mage(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n    public void castSpell(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nclass Archer extends Warrior {\n    int arrowCount;\n    Archer(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n    public void shoot(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nWarrior tank = new Warrior(\"Bron\", 150, 20);\nMage wizard = new Mage(\"Elara\", 80, 35);\nArcher ranger = new Archer(\"Swift\", 70, 30);\nWarrior boss = new Warrior(\"Dreadlord\", 200, 40);\n\n// Create: ArrayList<Warrior> party = new ArrayList<>();\n// Add heroes with party.add(...)\n// Use for-each to make everyone attack the boss!\n",
+validate:function(p){var l=p.collections.find(function(c){return c.name==='party';});
+if(!l)return{pass:false,msg:"Create: ArrayList<Warrior> party = new ArrayList<>();"};
+var adds=p.calls.filter(function(c){return c.obj==='party'&&c.method==='add';});
+if(adds.length<3)return{pass:false,msg:"Add at least 3 heroes to the party ("+adds.length+" so far)"};
+var loop=p.calls.find(function(c){return c.isLoop&&c.coll==='party';});
+if(!loop)return{pass:false,msg:"Use for-each: for (Warrior w : party) { w.attack(...); }"};
+return{pass:true,msg:"VICTORY! The party attacks in unison — Collections mastered! Quest Complete!"};}
+}
+];
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN APP COMPONENT
+// ═══════════════════════════════════════════════════════════════
+function App(){
+var s=useState,r=useRef,cb=useCallback;
+var _sp=s(true),showSplash=_sp[0],setShowSplash=_sp[1];
+var _qi=s(0),qIdx=_qi[0],setQIdx=_qi[1];
+var _cd=s(QUESTS[0].starter),code=_cd[0],setCode=_cd[1];
+var _lg=s([]),logs=_lg[0],setLogs=_lg[1];
+var _vm=s(''),valMsg=_vm[0],setValMsg=_vm[1];
+var _vp=s(false),valPass=_vp[0],setValPass=_vp[1];
+var _qd=s(false),qDone=_qd[0],setQDone=_qd[1];
+var _ht=s(-1),hintT=_ht[0],setHintT=_ht[1];
+var _cp=s(new Set()),completed=_cp[0],setCompleted=_cp[1];
+
+var canvasR=r(null),charsR=r([]),fxR=r([]),animR=r(null),tR=r(0),logR=r(null);
+var quest=QUESTS[qIdx];
+
+// Canvas loop
+useEffect(function(){
+var cv=canvasR.current;if(!cv||showSplash)return;
+var ctx=cv.getContext('2d');var run=true;
+function resize(){var rc=cv.parentElement.getBoundingClientRect();
+cv.width=rc.width*devicePixelRatio;cv.height=rc.height*devicePixelRatio;
+cv.style.width=rc.width+'px';cv.style.height=rc.height+'px';
+ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);}
+resize();window.addEventListener('resize',resize);
+function loop(){if(!run)return;tR.current+=0.016;
+var rc=cv.parentElement.getBoundingClientRect();
+Engine.render(ctx,rc.width,rc.height,charsR.current,fxR.current,tR.current);
+animR.current=requestAnimationFrame(loop);}loop();
+return function(){run=false;cancelAnimationFrame(animR.current);window.removeEventListener('resize',resize);};
+},[showSplash]);
+
+useEffect(function(){if(logR.current)logR.current.scrollTop=logR.current.scrollHeight;},[logs]);
+
+var addLog=cb(function(t,c){setLogs(function(p){return p.slice(-80).concat({text:t,color:c||'#5a7a9a',id:Date.now()+Math.random()});});},[]);
+
+// ─── ACTION EXECUTOR ───
+function execAction(action){
+var t=tR.current;
+if(action.type==='spawn'){
+var d=action.data;
+charsR.current=charsR.current.concat({id:action.name,name:d.nameStr,className:d.className,
+col:d.col,row:d.row,hp:d.hp,maxHp:d.maxHp,atk:d.atk,mana:d.mana,def:d.def,arrows:d.arrows,
+methods:d.methods,facingLeft:d.col>6,atkTimer:0,hurtTimer:0,castTimer:0,defTimer:0,
+screenX:undefined,screenY:undefined});
+addLog('\u2694\uFE0F '+d.nameStr+' ('+d.className+') summoned! HP:'+d.hp+' ATK:'+d.atk,'#4CAF50');
+}
+else if(action.type==='move'){
+charsR.current=charsR.current.map(function(c){
+return c.id===action.name?Object.assign({},c,{col:Math.min(Engine.COLS-1,Math.max(0,action.col)),row:Math.min(Engine.ROWS-1,Math.max(0,action.row)),facingLeft:action.col<c.col}):c;});
+addLog('\uD83D\uDEB6 '+action.name+'.move('+action.col+', '+action.row+')','#42A5F5');
+}
+else if(action.type==='attack'){
+var atkCh=charsR.current.find(function(c){return c.id===action.name;});
+var tgt=charsR.current.find(function(c){return c.id===action.target;});
+if(atkCh&&tgt){
+var dmg=atkCh.atk; // 1:1 mapping — exact attackPower
+var isMage=atkCh.className==='Mage';
+charsR.current=charsR.current.map(function(c){
+if(c.id===action.name)return Object.assign({},c,{atkTimer:1,facingLeft:tgt.col<c.col});
+if(c.id===action.target)return Object.assign({},c,{hp:Math.max(0,c.hp-dmg),hurtTimer:1});
+return c;});
+if(isMage){
+fxR.current=fxR.current.concat({type:'fireball',x:atkCh.screenX||200,y:(atkCh.screenY||150)-10,tx:tgt.screenX||300,ty:(tgt.screenY||200)-10,st:t,dur:1.0});
+}else{
+fxR.current=fxR.current.concat({type:'slash',x:((atkCh.screenX||0)+(tgt.screenX||0))/2||200,y:((atkCh.screenY||0)+(tgt.screenY||0))/2||150,st:t,dur:0.5});
+}
+fxR.current=fxR.current.concat({type:'damage',x:tgt.screenX||200,y:(tgt.screenY||150)-20,value:dmg,color:isMage?'#AB47BC':'#F44336',st:t,dur:1.2});
+addLog('\u2694\uFE0F '+atkCh.name+' attacks '+tgt.name+' for '+dmg+' damage! (attackPower='+atkCh.atk+')',isMage?'#AB47BC':'#F44336');
+setTimeout(function(){charsR.current=charsR.current.map(function(c){return Object.assign({},c,{atkTimer:0,hurtTimer:0});});},500);
+}}
+else if(action.type==='spell'){
+var atkCh=charsR.current.find(function(c){return c.id===action.name;});
+var tgt=charsR.current.find(function(c){return c.id===action.target;});
+if(atkCh&&tgt){
+charsR.current=charsR.current.map(function(c){return c.id===action.name?Object.assign({},c,{castTimer:1}):c;});
+fxR.current=fxR.current.concat({type:'fireball',x:atkCh.screenX||200,y:(atkCh.screenY||150)-10,tx:tgt.screenX||300,ty:(tgt.screenY||200)-10,st:t,dur:1.0});
+setTimeout(function(){
+var dmg=atkCh.atk; // exact attackPower
+charsR.current=charsR.current.map(function(c){
+if(c.id===action.target)return Object.assign({},c,{hp:Math.max(0,c.hp-dmg),hurtTimer:1});
+if(c.id===action.name)return Object.assign({},c,{castTimer:0});return c;});
+fxR.current=fxR.current.concat({type:'damage',x:tgt.screenX||300,y:(tgt.screenY||200)-20,value:dmg,color:'#AB47BC',st:tR.current,dur:1.2});
+addLog('\uD83D\uDD2E '+atkCh.name+' casts spell on '+tgt.name+' for '+dmg+'! (attackPower='+atkCh.atk+')','#AB47BC');
+setTimeout(function(){charsR.current=charsR.current.map(function(c){return Object.assign({},c,{hurtTimer:0});});},400);
+},550);
+}}
+else if(action.type==='heal'){
+var hlr=charsR.current.find(function(c){return c.id===action.name;});
+var tgt=charsR.current.find(function(c){return c.id===action.target;});
+if(!tgt)tgt=hlr; // heal self if no target
+if(hlr&&tgt){
+var amt=hlr.atk; // use attackPower as heal amount for 1:1
+charsR.current=charsR.current.map(function(c){return c.id===tgt.id?Object.assign({},c,{hp:Math.min(c.maxHp,c.hp+amt)}):c;});
+fxR.current=fxR.current.concat({type:'heal',x:tgt.screenX||200,y:tgt.screenY||200,st:t,dur:1.0});
+fxR.current=fxR.current.concat({type:'damage',x:(tgt.screenX||200)+10,y:(tgt.screenY||200)-20,value:amt,color:'#4CAF50',heal:true,st:t,dur:1.2});
+addLog('\u2728 '+hlr.name+' heals '+tgt.name+' for '+amt+' HP!','#4CAF50');
+}}
+else if(action.type==='defend'){
+charsR.current=charsR.current.map(function(c){return c.id===action.name?Object.assign({},c,{defTimer:1}):c;});
+var ch=charsR.current.find(function(c){return c.id===action.name;});
+if(ch)fxR.current=fxR.current.concat({type:'shield',x:ch.screenX||200,y:ch.screenY||200,st:t,dur:1.2});
+addLog('\uD83D\uDEE1\uFE0F '+action.name+' raises shield!','#42A5F5');
+setTimeout(function(){charsR.current=charsR.current.map(function(c){return c.id===action.name?Object.assign({},c,{defTimer:0}):c;});},1200);
+}
+else if(action.type==='shoot'){
+var atkCh=charsR.current.find(function(c){return c.id===action.name;});
+var tgt=charsR.current.find(function(c){return c.id===action.target;});
+if(atkCh&&tgt){
+fxR.current=fxR.current.concat({type:'arrow',x:atkCh.screenX||200,y:(atkCh.screenY||150)-10,tx:tgt.screenX||300,ty:(tgt.screenY||200)-10,st:t,dur:0.8});
+setTimeout(function(){
+var dmg=atkCh.atk; // exact attackPower
+charsR.current=charsR.current.map(function(c){return c.id===action.target?Object.assign({},c,{hp:Math.max(0,c.hp-dmg),hurtTimer:1}):c;});
+fxR.current=fxR.current.concat({type:'damage',x:tgt.screenX||300,y:(tgt.screenY||200)-20,value:dmg,color:'#FFEB3B',st:tR.current,dur:1.2});
+addLog('\uD83C\uDFF9 '+atkCh.name+' shoots '+tgt.name+' for '+dmg+'! (attackPower='+atkCh.atk+')','#FF9800');
+setTimeout(function(){charsR.current=charsR.current.map(function(c){return Object.assign({},c,{hurtTimer:0});});},400);
+},400);
+}}
+else if(action.type==='setter'){
+var ch=charsR.current.find(function(c){return c.id===action.name;});
+if(ch){
+var upd={};var val=parseInt(action.value)||0;
+if(action.field==='health'||action.field==='hp'){upd.hp=val;upd.maxHp=Math.max(ch.maxHp,val);}
+else if(action.field==='attackPower'||action.field==='attack'||action.field==='atk'){upd.atk=val;}
+charsR.current=charsR.current.map(function(c){return c.id===action.name?Object.assign({},c,upd):c;});
+addLog('\u2699\uFE0F '+action.name+'.set'+action.field.charAt(0).toUpperCase()+action.field.slice(1)+'('+action.value+')','#FF9800');
+}}
+else if(action.type==='special'){
+var ch=charsR.current.find(function(c){return c.id===action.name;});
+if(ch){
+var isMage=ch.className==='Mage';
+var isArcher=ch.className==='Archer';
+if(isMage&&action.target){
+var tgt=charsR.current.find(function(c2){return c2.id===action.target;});
+if(tgt){
+fxR.current=fxR.current.concat({type:'fireball',x:ch.screenX||200,y:(ch.screenY||150)-10,tx:tgt.screenX||300,ty:(tgt.screenY||200)-10,st:t,dur:1.0});
+var dmg=ch.atk;
+setTimeout(function(){
+charsR.current=charsR.current.map(function(c2){return c2.id===tgt.id?Object.assign({},c2,{hp:Math.max(0,c2.hp-dmg),hurtTimer:1}):c2;});
+fxR.current=fxR.current.concat({type:'damage',x:tgt.screenX||300,y:(tgt.screenY||200)-20,value:dmg,color:'#AB47BC',st:tR.current,dur:1.2});
+},500);
+}
+}else if(isArcher&&action.target){
+var tgt=charsR.current.find(function(c2){return c2.id===action.target;});
+if(tgt){
+fxR.current=fxR.current.concat({type:'arrow',x:ch.screenX||200,y:(ch.screenY||150)-10,tx:tgt.screenX||300,ty:(tgt.screenY||200)-10,st:t,dur:0.8});
+}
+}else{
+fxR.current=fxR.current.concat({type:'shield',x:ch.screenX||200,y:ch.screenY||200,st:t,dur:1.0});
+}
+addLog('\u2B50 '+ch.name+' uses specialAbility()!','#FFC107');
+setTimeout(function(){charsR.current=charsR.current.map(function(c){return Object.assign({},c,{hurtTimer:0});});},600);
+}}
+else if(action.type==='action'){
+var ch=charsR.current.find(function(c){return c.id===action.name;});
+if(ch&&action.method==='attack'&&action.args){
+var tgt=charsR.current.find(function(c){return c.id===action.args;});
+if(tgt){
+var dmg=ch.atk;
+var isMage=ch.className==='Mage';
+var isArcher=ch.className==='Archer';
+if(isMage){
+fxR.current=fxR.current.concat({type:'fireball',x:ch.screenX||200,y:(ch.screenY||150)-10,tx:tgt.screenX||300,ty:(tgt.screenY||200)-10,st:t,dur:1.0});
+setTimeout(function(){
+charsR.current=charsR.current.map(function(c2){return c2.id===tgt.id?Object.assign({},c2,{hp:Math.max(0,c2.hp-dmg),hurtTimer:1}):c2;});
+fxR.current=fxR.current.concat({type:'damage',x:tgt.screenX||300,y:(tgt.screenY||200)-20,value:dmg,color:'#AB47BC',st:tR.current,dur:1.2});
+addLog('\u2694\uFE0F '+ch.name+' attacks '+tgt.name+' for '+dmg+'!','#AB47BC');
+setTimeout(function(){charsR.current=charsR.current.map(function(c2){return Object.assign({},c2,{hurtTimer:0});});},400);
+},550);
+}else if(isArcher){
+fxR.current=fxR.current.concat({type:'arrow',x:ch.screenX||200,y:(ch.screenY||150)-10,tx:tgt.screenX||300,ty:(tgt.screenY||200)-10,st:t,dur:0.8});
+setTimeout(function(){
+charsR.current=charsR.current.map(function(c2){return c2.id===tgt.id?Object.assign({},c2,{hp:Math.max(0,c2.hp-dmg),hurtTimer:1}):c2;});
+fxR.current=fxR.current.concat({type:'damage',x:tgt.screenX||300,y:(tgt.screenY||200)-20,value:dmg,color:'#FFEB3B',st:tR.current,dur:1.2});
+addLog('\u2694\uFE0F '+ch.name+' attacks '+tgt.name+' for '+dmg+'!','#FF9800');
+setTimeout(function(){charsR.current=charsR.current.map(function(c2){return Object.assign({},c2,{hurtTimer:0});});},400);
+},400);
+}else{
+charsR.current=charsR.current.map(function(c2){
+if(c2.id===ch.id)return Object.assign({},c2,{atkTimer:1,facingLeft:tgt.col<c2.col});
+if(c2.id===tgt.id)return Object.assign({},c2,{hp:Math.max(0,c2.hp-dmg),hurtTimer:1});return c2;});
+fxR.current=fxR.current.concat({type:'slash',x:((ch.screenX||0)+(tgt.screenX||0))/2||200,y:((ch.screenY||0)+(tgt.screenY||0))/2||150,st:t,dur:0.5});
+fxR.current=fxR.current.concat({type:'damage',x:tgt.screenX||200,y:(tgt.screenY||150)-20,value:dmg,color:'#F44336',st:t,dur:1.2});
+addLog('\u2694\uFE0F '+ch.name+' attacks '+tgt.name+' for '+dmg+'!','#F44336');
+setTimeout(function(){charsR.current=charsR.current.map(function(c2){return Object.assign({},c2,{atkTimer:0,hurtTimer:0});});},500);
+}
+}}else if(ch){addLog('\u25B6 '+action.name+'.'+action.method+'('+(action.args||'')+')','#78909C');}
+}
+else if(action.type==='log'){addLog(action.text,action.color);}
+}
+
+var runCode=cb(function(){
+var parsed=parseJava(code);
+var val=quest.validate(parsed);
+setValMsg(val.msg);setValPass(val.pass);
+if(val.pass){setQDone(true);setCompleted(function(p){return new Set([].concat(Array.from(p),[qIdx]));});addLog('\u2705 '+val.msg,'#4CAF50');}
+else{addLog('\u26A0\uFE0F '+val.msg,'#FF9800');}
+
+var actions=buildActions(parsed);
+charsR.current=[];fxR.current=[];
+
+parsed.classes.forEach(function(c){
+var extra=c.isAbstract?' (abstract)':'';
+addLog('\uD83D\uDCCB Class "'+c.name+'"'+extra+' \u2014 '+c.attrs.length+' attrs, '+c.methods.length+' methods','#42A5F5');
+if(c.parent)addLog('   \u2514\u2500 extends '+c.parent,'#AB47BC');
+});
+parsed.interfaces.forEach(function(i){
+addLog('\uD83D\uDCC4 Interface "'+i.name+'" \u2014 '+i.methods.length+' methods','#FF9800');
+});
+
+actions.forEach(function(a){setTimeout(function(){execAction(a);},a.delay||0);});
+},[code,quest,qIdx,addLog]);
+
+var goTo=cb(function(i){
+setQIdx(i);setCode(QUESTS[i].starter);setQDone(completed.has(i));
+setValMsg('');setValPass(false);setHintT(-1);
+charsR.current=[];fxR.current=[];
+addLog('\u2500\u2500 Chapter '+(i+1)+': '+QUESTS[i].concept+' \u2500\u2500','#ff6b35');
+},[completed,addLog]);
+
+var handleKey=cb(function(e){
+if(e.key==='Tab'){e.preventDefault();var ta=e.target,s2=ta.selectionStart,end=ta.selectionEnd;
+setCode(code.substring(0,s2)+'    '+code.substring(end));
+setTimeout(function(){ta.selectionStart=ta.selectionEnd=s2+4;},0);}
+if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();runCode();}
+},[code,runCode]);
+
+// ═══ SPLASH ═══
+if(showSplash){
+var chs=[{n:'Warrior',i:'\u2694\uFE0F',c:'#F44336'},{n:'Mage',i:'\uD83D\uDD2E',c:'#AB47BC'},{n:'Archer',i:'\uD83C\uDFF9',c:'#4CAF50'},{n:'Healer',i:'\u2728',c:'#FFC107'}];
+return React.createElement('div',{className:'splash'},
+Array.from({length:25}).map(function(_,i){
+return React.createElement('div',{key:i,className:'splash-particle',style:{
+left:(Math.sin(i*127)*0.5+0.5)*100+'%',top:(Math.cos(i*311)*0.5+0.5)*100+'%',
+width:3,height:3,background:['#F44336','#42A5F5','#4CAF50','#FF9800','#AB47BC'][i%5],
+opacity:0.2+Math.random()*0.3,animationDelay:Math.random()*3+'s',animationDuration:3+Math.random()*2+'s'}});
+}),
+React.createElement('div',{className:'splash-title'},'OOP QUEST'),
+React.createElement('div',{className:'splash-sub'},'Java Battle Arena'),
+React.createElement('div',{className:'splash-chars'},
+chs.map(function(c,i){return React.createElement('div',{key:c.n,className:'splash-char',style:{animation:'particleFloat 3s ease-in-out infinite',animationDelay:i*0.25+'s'}},
+React.createElement('div',{className:'splash-char-icon',style:{background:c.c+'18',borderColor:c.c+'40'}},c.i),
+React.createElement('div',{className:'splash-char-label',style:{color:c.c}},c.n));})
+),
+React.createElement('button',{className:'btn-start',onClick:function(){setShowSplash(false);addLog('\u2500\u2500 Chapter 1: Classes & Attributes \u2500\u2500','#ff6b35');}},'Begin Quest'),
+React.createElement('div',{className:'splash-footer'},
+'Write Java code to summon warriors, cast spells, and battle.',React.createElement('br'),
+'10 Chapters: Classes \u00B7 Constructors \u00B7 Methods \u00B7 Encapsulation \u00B7 Inheritance \u00B7 Polymorphism \u00B7 Subclasses \u00B7 Abstract \u00B7 Interfaces \u00B7 Collections')
+);
+}
+
+// ═══ MAIN UI ═══
+return React.createElement('div',{className:'app'},
+React.createElement('div',{className:'topbar'},
+React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10}},
+React.createElement('span',{className:'topbar-title'},'OOP QUEST'),
+React.createElement('span',{style:{color:'#1a2744'}},'\u2502'),
+React.createElement('span',{className:'topbar-quest'},quest.concept)),
+React.createElement('div',{className:'quest-dots'},
+QUESTS.map(function(q,i){return React.createElement('div',{key:i,className:'quest-dot'+(i===qIdx?' active':'')+(completed.has(i)?' done':''),
+onClick:function(){goTo(i);}},completed.has(i)?'\u2713':i+1);}))),
+
+React.createElement('div',{className:'main'},
+React.createElement('div',{className:'arena-col'},
+React.createElement('div',{className:'quest-bar'},
+React.createElement('div',{className:'quest-title'},quest.title),
+React.createElement('div',{className:'quest-desc'},quest.description)),
+React.createElement('div',{className:'arena-wrap'},
+React.createElement('canvas',{ref:canvasR})),
+React.createElement('div',{className:'console-wrap'},
+React.createElement('div',{className:'console-label'},'Console Output'),
+React.createElement('div',{className:'console-box',ref:logR},
+logs.map(function(l){return React.createElement('div',{key:l.id,className:'console-line',style:{color:l.color}},
+React.createElement('span',{className:'prompt'},'>'),l.text);}),
+logs.length===0&&React.createElement('div',{style:{color:'#2a4a6a',fontStyle:'italic'}},'Write Java code and hit Run...')))),
+
+React.createElement('div',{className:'editor-col'},
+React.createElement('div',{className:'editor-head'},
+React.createElement('div',{style:{display:'flex',alignItems:'center'}},
+React.createElement('div',{className:'editor-dots'},
+React.createElement('span',{style:{background:'#F44336'}}),
+React.createElement('span',{style:{background:'#FF9800'}}),
+React.createElement('span',{style:{background:'#4CAF50'}})),
+React.createElement('span',{className:'editor-filename'},'Main.java')),
+React.createElement('div',{className:'editor-actions'},
+React.createElement('button',{className:'btn-hint',onClick:function(){setHintT(function(p){return p<2?p+1:-1;});}},
+'\uD83D\uDCA1 '+(hintT>=0?'Hint '+(hintT+1)+'/3':'Hint')),
+React.createElement('button',{className:'btn-run',onClick:runCode},'\u25B6 Run'))),
+
+hintT>=0&&React.createElement('div',{className:'hint-panel'},
+React.createElement('div',{className:'hint-tier'},(hintT===0?'CONCEPTUAL':hintT===1?'STRUCTURAL':'SPECIFIC')+' HINT '+(hintT+1)+'/3'+(hintT<2?' (tap \uD83D\uDCA1 for more)':'')),
+quest.hints[hintT],
+hintT<2&&React.createElement('button',{onClick:function(){setHintT(hintT+1);}},'Need more help \u2192')),
+
+React.createElement('div',{className:'editor-body'},
+React.createElement('div',{className:'line-nums'},
+code.split('\n').map(function(_,i){return React.createElement('div',{key:i},i+1);})),
+React.createElement('textarea',{className:'code-ta',value:code,onChange:function(e){setCode(e.target.value);},onKeyDown:handleKey,spellCheck:false})),
+
+React.createElement('div',{className:'result-bar',style:{
+background:valPass?'rgba(76,175,80,0.06)':valMsg?'rgba(244,67,54,0.06)':'transparent',
+animation:valPass?'successPulse 1s ease':'none'}},
+valMsg?React.createElement('div',{className:'result-msg '+(valPass?'pass':'fail')},
+React.createElement('span',null,valPass?'\u2705':'\u26A0\uFE0F'),React.createElement('span',null,valMsg)):
+React.createElement('div',{className:'result-msg idle'},'Press \u25B6 Run or Ctrl+Enter to execute'),
+qDone&&qIdx<QUESTS.length-1&&React.createElement('button',{className:'btn-next',onClick:function(){goTo(qIdx+1);}},'NEXT CHAPTER \u2192'),
+qDone&&qIdx===QUESTS.length-1&&React.createElement('div',{className:'trophy'},
+React.createElement('div',{className:'trophy-icon'},'\uD83C\uDFC6'),
+React.createElement('div',{className:'trophy-title'},'QUEST COMPLETE!'),
+React.createElement('div',{className:'trophy-sub'},"You've mastered Java OOP — all 10 chapters conquered!"))
+)))
+);
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script>
+</body>
+</html>

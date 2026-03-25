@@ -1,0 +1,5 @@
+{
+  "name": "java-oop-quest",
+  "private": true,
+  "workspaces": ["frontend", "backend"]
+}
