@@ -3,6 +3,9 @@
   command = "npm install && npx vite build"
   publish = "dist"
 
+[functions]
+  directory = "netlify/functions"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
