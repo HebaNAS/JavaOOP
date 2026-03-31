@@ -25,14 +25,15 @@ function chapterXP(index: number): number {
 }
 
 export default function App() {
-  // ─── Instructor page via hash ───
-  const [isInstructor, setIsInstructor] = useState(window.location.hash === '#instructor')
+  // ─── Instructor page via /instructor path ───
+  const [pathname, setPathname] = useState(window.location.pathname)
   useEffect(() => {
-    const handler = () => setIsInstructor(window.location.hash === '#instructor')
-    window.addEventListener('hashchange', handler)
-    return () => window.removeEventListener('hashchange', handler)
+    const onPop = () => setPathname(window.location.pathname)
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
   }, [])
-  if (isInstructor) return <InstructorPage />
+
+  if (pathname === '/instructor') return <InstructorPage />
 
   return <GameApp />
 }
