@@ -1,7 +1,6 @@
 [build]
-  base = "frontend"
-  command = "npm install && npm run build"
-  publish = "dist"
+  command = "cd frontend && npm install && npx vite build"
+  publish = "frontend/dist"
 
 [[redirects]]
   from = "/*"
