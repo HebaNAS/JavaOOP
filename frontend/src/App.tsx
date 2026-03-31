@@ -5,13 +5,39 @@ import XPBar from './ui/XPBar'
 import SyntaxReference from './ui/SyntaxReference'
 import { useGameStore } from './state/gameStore'
 import { useChapterStore, getLevel } from './state/chapterStore'
+import { useClassroomStore } from './state/classroomStore'
 import { CHAPTERS } from './chapters/chapters'
 import { clearKeyboardBindings } from './interaction/KeyboardController'
 import { parseJava } from './parser/JavaParser'
 import { buildActions, executeActions } from './parser/ActionExecutor'
 import { Sounds } from './assets/sounds'
+import ClassroomEntry from './ui/classroom/ClassroomEntry'
+import TeamSelect from './ui/classroom/TeamSelect'
+import ClassroomNav from './ui/classroom/ClassroomNav'
+import SubmitButton from './ui/classroom/SubmitButton'
+import Leaderboard from './ui/classroom/Leaderboard'
+import InstructorPage from './ui/classroom/InstructorPage'
+
+function chapterXP(index: number): number {
+  if (index < 5) return 100
+  if (index < 10) return 200
+  return 300
+}
 
 export default function App() {
+  // ─── Instructor page via hash ───
+  const [isInstructor, setIsInstructor] = useState(window.location.hash === '#instructor')
+  useEffect(() => {
+    const handler = () => setIsInstructor(window.location.hash === '#instructor')
+    window.addEventListener('hashchange', handler)
+    return () => window.removeEventListener('hashchange', handler)
+  }, [])
+  if (isInstructor) return <InstructorPage />
+
+  return <GameApp />
+}
+
+function GameApp() {
   const [showSplash, setShowSplash] = useState(true)
   const [code, setCode] = useState(CHAPTERS[0].starter)
   const [valMsg, setValMsg] = useState('')
@@ -23,11 +49,13 @@ export default function App() {
   const { currentChapter, completedChapters, isUnlocked, completeChapter, goToChapter,
           getSolution, getDraft, saveDraft, useHint, resetHintsForChapter, resetAllProgress, xp } = useChapterStore()
   const { addLog, clearScene, logs, triggerConfetti } = useGameStore()
+  const { mode, classroomView, setMode, setClassroomView } = useClassroomStore()
   const logRef = useRef<HTMLDivElement>(null)
 
   const chapter = CHAPTERS[currentChapter]
   const isDone = completedChapters.includes(currentChapter)
   const savedSolution = getSolution(currentChapter)
+  const isClassroom = mode === 'classroom'
 
   // Auto-scroll console
   useEffect(() => {
@@ -139,7 +167,7 @@ export default function App() {
   }
 
   // ═══ SPLASH ═══
-  if (showSplash) {
+  if (showSplash && !isClassroom) {
     return (
       <div className="splash">
         <div style={{ position: 'absolute', inset: 0 }}><GameScene isSplash /></div>
@@ -178,6 +206,14 @@ export default function App() {
               {completedChapters.length}/{CHAPTERS.length} chapters · {xp} XP · {getLevel(xp).title}
             </div>
           )}
+
+          <button className="btn-classroom" onClick={() => {
+            setMode('classroom')
+            setClassroomView('join-session')
+          }}>
+            🏫 Classroom Mode
+          </button>
+
           <div className="splash-footer">
             Write Java code to summon warriors, cast spells, and battle in 3D.<br />
             15 Chapters · XP &amp; Levels · Enemy AI · Keyboard Combat
@@ -186,6 +222,26 @@ export default function App() {
         </div>
       </div>
     )
+  }
+
+  // ═══ CLASSROOM: Entry / Team Select / Leaderboard ═══
+  if (isClassroom && classroomView === 'join-session') {
+    return <ClassroomEntry onBack={() => { setMode('free'); setClassroomView('join-session') }} />
+  }
+  if (isClassroom && classroomView === 'team-select') {
+    return <TeamSelect />
+  }
+  if (isClassroom && classroomView === 'leaderboard') {
+    return <Leaderboard onBack={() => setClassroomView('game')} />
+  }
+
+  // If classroom mode but showing splash equivalent, skip splash
+  if (isClassroom && showSplash) {
+    setShowSplash(false)
+    const saved = useChapterStore.getState().getSolution(currentChapter)
+    const draft = useChapterStore.getState().getDraft(currentChapter)
+    if (draft || saved) setCode(draft || saved || CHAPTERS[currentChapter].starter)
+    addLog(`── Chapter ${currentChapter + 1}: ${CHAPTERS[currentChapter].concept} ──`, '#ff6b35')
   }
 
   // ═══ RESET MODAL ═══
@@ -237,6 +293,7 @@ export default function App() {
           <span className="topbar-quest">{chapter.concept}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {isClassroom && <ClassroomNav />}
           <XPBar />
           <div className="quest-dots">
             {CHAPTERS.map((_, i) => {
@@ -363,6 +420,9 @@ export default function App() {
               </div>
             ) : (
               <div className="result-msg idle">Press ▶ Run or Ctrl+Enter to execute</div>
+            )}
+            {isDone && isClassroom && (
+              <SubmitButton chapterIndex={currentChapter} xp={chapterXP(currentChapter)} />
             )}
             {isDone && currentChapter < CHAPTERS.length - 1 && (
               <button className="btn-next" onClick={() => handleGoTo(currentChapter + 1)}>NEXT CHAPTER →</button>
