@@ -187,9 +187,9 @@ export default function AlchemistVisuals({ code, compiled, success }: {
 
   return (
     <div style={{
-      padding: '16px 20px', minHeight: 140,
-      background: 'linear-gradient(180deg, #111827 0%, #161d30 100%)',
-      borderBottom: '1px solid #2e3d5a', position: 'relative', overflow: 'hidden',
+      padding: '10px 16px', minHeight: 100, flexShrink: 0,
+      background: 'linear-gradient(180deg, #0d1117 0%, #131a28 100%)',
+      borderBottom: '1px solid #30405c', position: 'relative', overflow: 'hidden',
     }}>
       {/* CSS animations */}
       <style>{`
@@ -216,8 +216,8 @@ export default function AlchemistVisuals({ code, compiled, success }: {
         </div>
       ) : (
         <div style={{
-          textAlign: 'center', padding: '20px 0', color: '#4a5a72',
-          fontFamily: 'JetBrains Mono', fontSize: 18, fontStyle: 'italic',
+          textAlign: 'center', padding: '14px 0', color: '#667890',
+          fontFamily: 'JetBrains Mono', fontSize: 14, fontStyle: 'italic',
         }}>
           🧪 Declare variables to see them appear as potions...
         </div>
