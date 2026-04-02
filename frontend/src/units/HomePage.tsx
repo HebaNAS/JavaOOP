@@ -2,9 +2,17 @@ import { useUnitStore } from '../state/unitStore'
 import { useChapterStore } from '../state/chapterStore'
 import { UNITS } from './index'
 
-interface Props {
-  onNavigate: (path: string) => void
+const C = {
+  bg: '#161d30',
+  surface: '#1e2842',
+  border: '#2e3d5a',
+  text: '#e8edf5',
+  textMid: '#a0b0c8',
+  textMuted: '#6d809c',
+  success: '#4dbd74',
 }
+
+interface Props { onNavigate: (path: string) => void }
 
 export default function HomePage({ onNavigate }: Props) {
   const unitProgress = useUnitStore((s) => s.completed)
@@ -13,27 +21,27 @@ export default function HomePage({ onNavigate }: Props) {
 
   return (
     <div style={{
-      minHeight: '100vh', background: '#0a0e17', color: '#c0d0e0',
+      minHeight: '100vh', background: C.bg, color: C.text,
       display: 'flex', flexDirection: 'column', alignItems: 'center',
     }}>
       {/* Header */}
-      <div style={{ textAlign: 'center', padding: '48px 20px 32px' }}>
+      <div style={{ textAlign: 'center', padding: '56px 24px 40px' }}>
         <div style={{
-          fontFamily: 'Orbitron', fontWeight: 900, fontSize: 36,
+          fontFamily: 'Orbitron', fontWeight: 900, fontSize: 52,
           background: 'linear-gradient(135deg, #ff6b35, #ffc045)',
           WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          marginBottom: 8,
+          marginBottom: 12,
         }}>
           SOFTWARE DEVELOPMENT 1
         </div>
-        <div style={{ fontSize: 15, color: '#5a7a9a', marginBottom: 20 }}>
-          F27SA \u2014 Java OOP Quest
+        <div style={{ fontSize: 24, color: C.textMuted, marginBottom: 24 }}>
+          F27SA — Java OOP Quest
         </div>
         {totalXP > 0 && (
           <div style={{
-            display: 'inline-block', padding: '6px 20px', borderRadius: 8,
-            background: 'rgba(255,193,7,0.08)', border: '1px solid rgba(255,193,7,0.2)',
-            fontFamily: 'JetBrains Mono', fontSize: 13, color: '#FFC107',
+            display: 'inline-block', padding: '8px 24px', borderRadius: 10,
+            background: 'rgba(255,193,7,0.10)', border: '1px solid rgba(255,193,7,0.25)',
+            fontFamily: 'JetBrains Mono', fontSize: 22, color: '#e8b84d',
           }}>
             Total XP: {totalXP}
           </div>
@@ -42,8 +50,8 @@ export default function HomePage({ onNavigate }: Props) {
 
       {/* Unit grid */}
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-        gap: 16, padding: '0 40px 40px', maxWidth: 1000, width: '100%',
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+        gap: 20, padding: '0 48px 48px', maxWidth: 1200, width: '100%',
       }}>
         {UNITS.map((u) => {
           const isArena = u.path === '/arena'
@@ -59,52 +67,51 @@ export default function HomePage({ onNavigate }: Props) {
               key={u.id}
               onClick={() => available && onNavigate(u.path)}
               style={{
-                padding: '20px 24px', borderRadius: 12, cursor: available ? 'pointer' : 'default',
-                background: available ? `${u.theme.bg}` : '#0c1018',
-                border: `1px solid ${available ? u.theme.primary + '30' : '#151c28'}`,
-                opacity: available ? 1 : 0.45,
+                padding: '24px 28px', borderRadius: 14, cursor: available ? 'pointer' : 'default',
+                background: available ? C.surface : '#131a28',
+                border: `1px solid ${available ? u.theme.primary + '35' : '#1a2236'}`,
+                opacity: available ? 1 : 0.5,
                 transition: 'all .2s',
                 position: 'relative', overflow: 'hidden',
               }}
               onMouseEnter={(e) => { if (available) e.currentTarget.style.borderColor = u.theme.primary + '80' }}
-              onMouseLeave={(e) => { if (available) e.currentTarget.style.borderColor = u.theme.primary + '30' }}
+              onMouseLeave={(e) => { if (available) e.currentTarget.style.borderColor = u.theme.primary + '35' }}
             >
-              {/* Progress bar background */}
               {progress > 0 && (
                 <div style={{
-                  position: 'absolute', left: 0, bottom: 0, height: 3,
-                  width: `${pct}%`, background: u.theme.primary, borderRadius: '0 2px 0 12px',
+                  position: 'absolute', left: 0, bottom: 0, height: 4,
+                  width: `${pct}%`, background: u.theme.primary, borderRadius: '0 3px 0 14px',
                   transition: 'width .5s',
                 }} />
               )}
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                <span style={{ fontSize: 28 }}>{u.theme.icon}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
+                <span style={{ fontSize: 44 }}>{u.theme.icon}</span>
                 <div>
                   <div style={{
-                    fontFamily: 'Orbitron', fontWeight: 700, fontSize: 13,
-                    color: available ? u.theme.primary : '#3a4a5a',
+                    fontFamily: 'Orbitron', fontWeight: 700, fontSize: 20,
+                    color: available ? u.theme.primary : '#3e4f68',
                   }}>
                     Unit {u.number}
                   </div>
                   <div style={{
-                    fontFamily: 'Orbitron', fontWeight: 700, fontSize: 16,
-                    color: available ? '#e0e8f0' : '#3a4a5a',
+                    fontFamily: 'Orbitron', fontWeight: 700, fontSize: 26,
+                    color: available ? C.text : '#3e4f68',
                   }}>
                     {u.title}
                   </div>
                 </div>
               </div>
-              <div style={{ fontSize: 13, color: available ? '#6a8aaa' : '#2a3a4a', lineHeight: 1.5, marginBottom: 10 }}>
+              <div style={{ fontSize: 22, color: available ? C.textMid : '#2e3d50', lineHeight: 1.5, marginBottom: 12 }}>
                 {u.subtitle}
               </div>
               <div style={{
-                fontSize: 11, fontFamily: 'JetBrains Mono',
-                color: available ? '#4a6a8a' : '#2a3a4a',
+                fontSize: 18, fontFamily: 'JetBrains Mono',
+                color: available ? C.textMuted : '#2e3d50',
               }}>
                 {available
                   ? progress > 0
-                    ? `${progress}/${total} challenges \u2022 ${pct}%`
+                    ? `${progress}/${total} challenges · ${pct}%`
                     : `${total} challenges`
                   : 'Coming soon'}
               </div>
@@ -114,18 +121,18 @@ export default function HomePage({ onNavigate }: Props) {
       </div>
 
       {/* Footer links */}
-      <div style={{ padding: '20px 40px 40px', display: 'flex', gap: 16 }}>
+      <div style={{ padding: '24px 48px 48px', display: 'flex', gap: 20 }}>
         <button onClick={() => onNavigate('/instructor')} style={{
-          padding: '8px 20px', borderRadius: 8, cursor: 'pointer',
-          background: 'rgba(255,255,255,0.03)', border: '1px solid #1a2744',
-          color: '#5a7a9a', fontFamily: 'JetBrains Mono', fontSize: 13,
+          padding: '10px 24px', borderRadius: 10, cursor: 'pointer',
+          background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`,
+          color: C.textMuted, fontFamily: 'JetBrains Mono', fontSize: 22,
         }}>
           Instructor Panel
         </button>
       </div>
 
-      <div style={{ padding: '0 0 24px', fontSize: 12, color: '#2a3a5a' }}>
-        \u00A9 {new Date().getFullYear()} Heba El-Shimy. All rights reserved.
+      <div style={{ padding: '0 0 28px', fontSize: 20, color: C.textMuted }}>
+        © {new Date().getFullYear()} Heba El-Shimy. All rights reserved.
       </div>
     </div>
   )

@@ -6,9 +6,10 @@ interface CodeEditorProps {
   value: string
   onChange: (value: string) => void
   onRun: () => void
+  fontSize?: number
 }
 
-export default function CodeEditor({ value, onChange, onRun }: CodeEditorProps) {
+export default function CodeEditor({ value, onChange, onRun, fontSize = 12 }: CodeEditorProps) {
   return (
     <CodeMirror
       value={value}
@@ -16,7 +17,7 @@ export default function CodeEditor({ value, onChange, onRun }: CodeEditorProps) 
       extensions={[java()]}
       theme={oneDark}
       height="100%"
-      style={{ height: '100%', fontSize: 12 }}
+      style={{ height: '100%', fontSize }}
       basicSetup={{
         lineNumbers: true,
         foldGutter: false,
