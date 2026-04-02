@@ -4,6 +4,7 @@ import Database from 'better-sqlite3'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import crypto from 'crypto'
+import { compileAndRun, checkJava } from './compiler.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -340,6 +341,31 @@ app.get('/api/classroom/sessions/:code/leaderboard', (req, res) => {
   res.json({ teams: result })
 })
 
+// ═══════════════════════════════════════════════════
+// JAVA COMPILATION ENDPOINT
+// ═══════════════════════════════════════════════════
+
+app.post('/api/compile', async (req, res) => {
+  const { code, stdin } = req.body
+  if (!code || typeof code !== 'string') {
+    return res.status(400).json({ error: 'code is required' })
+  }
+  if (code.length > 50_000) {
+    return res.status(400).json({ error: 'Code too long (50KB limit)' })
+  }
+  try {
+    const result = await compileAndRun(code, stdin)
+    res.json(result)
+  } catch (err: any) {
+    console.error('Compile error:', err)
+    res.status(500).json({ error: 'Compilation service error' })
+  }
+})
+
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`)
+  checkJava().then(({ ok, version }) => {
+    if (ok) console.log(`  Java compiler: ${version}`)
+    else console.warn('  !! Java not found — /api/compile will not work. Install JDK 11+.')
+  })
 })
