@@ -102,7 +102,7 @@ app.post('/api/progress/:userId/complete', (req, res) => {
   const { userId } = req.params
   const { chapterId } = req.body
 
-  if (typeof chapterId !== 'number' || chapterId < 0 || chapterId > 14) {
+  if (typeof chapterId !== 'number' || chapterId < 0 || chapterId > 30) {
     return res.status(400).json({ error: 'Invalid chapterId' })
   }
 
@@ -278,7 +278,7 @@ app.post('/api/classroom/submissions', (req, res) => {
   if (!memberId || !teamId || typeof chapterIndex !== 'number' || typeof xp !== 'number') {
     return res.status(400).json({ error: 'memberId, teamId, chapterIndex, and xp are required' })
   }
-  if (chapterIndex < 0 || chapterIndex > 14) {
+  if (chapterIndex < 0 || chapterIndex > 30) {
     return res.status(400).json({ error: 'Invalid chapterIndex' })
   }
 

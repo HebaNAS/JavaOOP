@@ -10,6 +10,7 @@ import { CHAPTERS } from './chapters/chapters'
 import { clearKeyboardBindings } from './interaction/KeyboardController'
 import { parseJava } from './parser/JavaParser'
 import { buildActions, executeActions } from './parser/ActionExecutor'
+import { compileCode } from './api/compiler'
 import { Sounds } from './assets/sounds'
 import ClassroomEntry from './ui/classroom/ClassroomEntry'
 import TeamSelect from './ui/classroom/TeamSelect'
@@ -24,7 +25,8 @@ import { getUnitDef } from './units/index'
 function chapterXP(index: number): number {
   if (index < 5) return 100
   if (index < 10) return 200
-  return 300
+  if (index < 15) return 300
+  return 350 // advanced chapters 16-19
 }
 
 function navigate(path: string) {
@@ -113,7 +115,6 @@ function GameApp() {
         addLog(`🌟 +${earned} XP earned!${useChapterStore.getState().hintsUsedThisChapter === 0 ? ' (No hints bonus!)' : ''}`, '#FFC107')
         Sounds.victory()
         triggerConfetti()
-        // Check level up
         const oldLv = getLevel(prevXP)
         const newLv = getLevel(newXP)
         if (newLv.level > oldLv.level) {
@@ -143,6 +144,21 @@ function GameApp() {
 
     const { actions, charMap } = buildActions(parsed)
     executeActions(actions, addLog, charMap)
+
+    // ── Real Java compilation (parallel) ──
+    compileCode(code).then((r) => {
+      if (r.success) {
+        addLog('☕ Java compiler: code compiles successfully!', '#5cd98e')
+        if (r.output.trim()) addLog(`   stdout: ${r.output.trim()}`, '#a0b0c8')
+      } else {
+        addLog('☕ Java compiler found issues:', '#ff8c5a')
+        r.errors.split('\n').filter(Boolean).slice(0, 4).forEach((line) => {
+          addLog(`   ${line}`, '#ff8c5a')
+        })
+      }
+    }).catch(() => {
+      addLog('☕ Compiler unavailable (backend not running)', '#6d809c')
+    })
   }, [code, chapter, currentChapter, xp, addLog, clearScene, completeChapter, triggerConfetti])
 
   const handleGoTo = useCallback((i: number) => {
@@ -235,7 +251,7 @@ function GameApp() {
 
           <div className="splash-footer">
             Write Java code to summon warriors, cast spells, and battle in 3D.<br />
-            15 Chapters · XP &amp; Levels · Enemy AI · Keyboard Combat
+            {CHAPTERS.length} Chapters · XP &amp; Levels · Enemy AI · Real Java Compiler
           </div>
           <div className="copyright">© {new Date().getFullYear()} Heba El-Shimy. All rights reserved.</div>
         </div>
@@ -454,7 +470,7 @@ function GameApp() {
               }}>
                 <div style={{ fontSize: 40 }}>🏆</div>
                 <div style={{ fontSize: 18, color: '#ffc045', fontFamily: 'Orbitron', fontWeight: 700, marginTop: 6 }}>QUEST COMPLETE!</div>
-                <div style={{ fontSize: 14, color: '#7a9aba', marginTop: 4 }}>All 15 chapters conquered — Java OOP Master!</div>
+                <div style={{ fontSize: 14, color: '#7a9aba', marginTop: 4 }}>All {CHAPTERS.length} chapters conquered — Java OOP Master!</div>
               </div>
             )}
           </div>

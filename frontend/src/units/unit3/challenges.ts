@@ -236,5 +236,46 @@ export const UNIT_3: UnitDef = {
       },
       xp: 100,
     },
+
+    // ─── BONUS: Predict the Output ───
+    {
+      title: 'The Oracle\'s Test',
+      concept: 'Predict the Output',
+      description:
+        'The Oracle shows you a snippet of code and asks: "What will this print?"\n\n' +
+        'Study the code carefully, then type the EXACT output you predict below.\n' +
+        '(Include each line of output, pressing Enter between lines.)',
+      hints: [
+        'Trace through the code line by line. What is x at each step?',
+        'The if condition checks x > 5 — is 3 greater than 5?',
+        'x starts at 3, the if is false so the else runs. Then the final println always runs.',
+      ],
+      starter: '',
+      validate: {
+        type: 'predict',
+        code: 'int x = 3;\nif (x > 5) {\n    System.out.println("Big");\n} else {\n    System.out.println("Small");\n}\nSystem.out.println("Done: " + x);',
+      },
+      xp: 75,
+    },
+
+    // ─── BONUS: Find the Bug ───
+    {
+      title: 'The Cursed Scroll',
+      concept: 'Find & Fix the Bug',
+      description:
+        'A fellow adventurer wrote this code but it doesn\'t work! The loop should print numbers 1 to 5, but something is wrong.\n\n' +
+        'Find the bug and fix it so the output is:\n1\n2\n3\n4\n5',
+      hints: [
+        'Look at the loop condition carefully — when does it stop?',
+        'The loop says i <= 10 but we only want 1 to 5.',
+        'Change the condition to i <= 5.',
+      ],
+      starter: '// Bug: this should print 1 to 5, but it prints too many!\nfor (int i = 1; i <= 10; i++) {\n    System.out.println(i);\n}\n',
+      validate: {
+        type: 'bugfix',
+        expected: '1\n2\n3\n4\n5',
+      },
+      xp: 75,
+    },
   ],
 }

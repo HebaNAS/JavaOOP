@@ -16,6 +16,8 @@ export type ChallengeValidation =
   | { type: 'compiles' }
   | { type: 'testCases'; cases: TestCase[] }
   | { type: 'custom'; stdin?: string; check: (result: CompileResult, code: string) => { pass: boolean; msg: string } }
+  | { type: 'predict'; code: string; stdin?: string }
+  | { type: 'bugfix'; stdin?: string; expected: string; bugDescription: string }
 
 export interface TestCase {
   stdin?: string

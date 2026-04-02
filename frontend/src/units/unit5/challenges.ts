@@ -173,5 +173,45 @@ export const UNIT_5: UnitDef = {
       },
       xp: 125,
     },
+
+    // ─── BONUS: Predict the Output ───
+    {
+      title: 'The Appraiser\'s Eye',
+      concept: 'Predict the Output',
+      description:
+        'The master appraiser tests your understanding: "Look at this code and tell me what it prints. Every line, exactly."\n\n' +
+        'Type the EXACT output.',
+      hints: [
+        'The array has 4 elements: {10, 20, 30, 40}. The for loop uses index i.',
+        'It only prints when i % 2 == 0 — that means index 0 and index 2.',
+        'arr[0] = 10 and arr[2] = 30. Then "Total: 100" (sum of all four).',
+      ],
+      starter: '',
+      validate: {
+        type: 'predict',
+        code: 'int[] arr = {10, 20, 30, 40};\nint total = 0;\nfor (int i = 0; i < arr.length; i++) {\n    total += arr[i];\n    if (i % 2 == 0) {\n        System.out.println(arr[i]);\n    }\n}\nSystem.out.println("Total: " + total);',
+      },
+      xp: 75,
+    },
+
+    // ─── BONUS: Find the Bug ───
+    {
+      title: 'The Faulty Scales',
+      concept: 'Find & Fix the Bug',
+      description:
+        'The scales should find the maximum value in the array, but they always return the first element!\n\n' +
+        'Fix the bug so it correctly prints:\nMax: 91',
+      hints: [
+        'Look at the comparison inside the loop — what is it comparing?',
+        'It says arr[i] > arr[0] — but arr[0] never changes. It should compare against max.',
+        'Change the condition to arr[i] > max.',
+      ],
+      starter: 'int[] arr = {45, 12, 78, 33, 91, 56};\nint max = arr[0];\nfor (int i = 1; i < arr.length; i++) {\n    if (arr[i] > arr[0]) {  // BUG HERE\n        max = arr[i];\n    }\n}\nSystem.out.println("Max: " + max);\n',
+      validate: {
+        type: 'bugfix',
+        expected: 'Max: 91',
+      },
+      xp: 75,
+    },
   ],
 }

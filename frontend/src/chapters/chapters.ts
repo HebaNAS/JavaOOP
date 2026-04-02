@@ -345,7 +345,110 @@ export const CHAPTERS: Chapter[] = [
       if (!loop) return { pass: false, msg: 'Use for-each to command your party!' }
       const healCall = p.calls.find((c) => c.method === 'heal')
       if (!healCall) return { pass: false, msg: 'Heal your team before the final battle!' }
-      return { pass: true, msg: '🏆 THE DREADLORD FALLS! You have mastered Java OOP! All 15 chapters conquered!' }
+      return { pass: true, msg: '🏆 THE DREADLORD FALLS! The core quest is complete!' }
+    },
+  },
+
+  // ═══════════════════════════════════════════════════
+  // ADVANCED CHAPTERS 16-19
+  // ═══════════════════════════════════════════════════
+
+  // ─── CHAPTER 16: super() Constructor Chaining ───
+  {
+    id: 16, title: 'Chapter 16: The Chain of Command', concept: 'super() — Constructor Chaining',
+    description: 'A child class must honour its parent. Use super() in Mage\'s constructor to call Warrior\'s constructor, passing name, health, and attackPower up the chain. Then add mana as Mage\'s own field. Create a Mage and verify it works!',
+    hints: [
+      'When Mage extends Warrior, the parent\'s fields are set by the parent\'s constructor — not by the child directly.',
+      'Inside Mage\'s constructor, the FIRST line must be: super(name, health, attackPower); — then set this.mana = mana;',
+      'Mage(String name, int health, int attackPower, int mana) { super(name, health, attackPower); this.mana = mana; }',
+    ],
+    starter: 'class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\n// Create Mage extending Warrior\n// Use super() in the constructor!\n// Add int mana as Mage\'s own field\n\n// Create a Mage and a Warrior, have the Mage attack!\n',
+    validate(p) {
+      const mg = p.classes.find((c) => c.name === 'Mage')
+      if (!mg) return { pass: false, msg: 'Create a Mage class' }
+      if (mg.parent !== 'Warrior') return { pass: false, msg: 'Mage should extend Warrior' }
+      if (!mg.ctor) return { pass: false, msg: 'Mage needs a constructor' }
+      if (!mg.ctor.body.includes('super(')) return { pass: false, msg: 'Use super() to call the parent constructor — it must be the first line!' }
+      if (!mg.attrs.find((a) => a.name === 'mana')) return { pass: false, msg: 'Add int mana to Mage' }
+      if (!p.objects.find((o) => o.className === 'Mage')) return { pass: false, msg: 'Create a Mage object!' }
+      return { pass: true, msg: 'The chain of command holds! super() properly delegates to the parent.' }
+    },
+  },
+
+  // ─── CHAPTER 17: Abstraction Deep Dive ───
+  {
+    id: 17, title: 'Chapter 17: The Hidden Blueprint', concept: 'Abstraction — Hiding Complexity',
+    description: 'Abstraction means showing only what matters. Create an abstract class Vehicle with abstract method move() and a concrete method describe() that prints the vehicle type. Then create Car and Boat that each implement move() differently. Instantiate both and call move() + describe() on each!',
+    hints: [
+      'abstract class Vehicle { abstract void move(); void describe() { System.out.println("I am a vehicle"); } }',
+      'Car extends Vehicle and implements move() with its own behaviour. Same for Boat. You cannot instantiate Vehicle directly!',
+      'Create Car car = new Car(...); car.move(); car.describe(); — same for Boat.',
+    ],
+    starter: '// abstract class Vehicle\n//   abstract void move();\n//   void describe() — prints vehicle type\n\n// class Car extends Vehicle — implements move()\n// class Boat extends Vehicle — implements move()\n\n// Create both, call move() and describe() on each\n',
+    validate(p) {
+      const vh = p.classes.find((c) => c.name === 'Vehicle')
+      if (!vh) return { pass: false, msg: 'Create an abstract class Vehicle' }
+      if (!vh.isAbstract) return { pass: false, msg: 'Vehicle must be abstract' }
+      if (!vh.methods.find((m) => m.name === 'move' && m.isAbstract)) return { pass: false, msg: 'Add abstract void move() to Vehicle' }
+      if (!vh.methods.find((m) => m.name === 'describe' && !m.isAbstract)) return { pass: false, msg: 'Add a concrete describe() method to Vehicle' }
+      const car = p.classes.find((c) => c.name === 'Car')
+      if (!car || car.parent !== 'Vehicle') return { pass: false, msg: 'Create class Car extends Vehicle' }
+      if (!car.methods.find((m) => m.name === 'move')) return { pass: false, msg: 'Car must implement move()' }
+      const boat = p.classes.find((c) => c.name === 'Boat')
+      if (!boat || boat.parent !== 'Vehicle') return { pass: false, msg: 'Create class Boat extends Vehicle' }
+      if (!boat.methods.find((m) => m.name === 'move')) return { pass: false, msg: 'Boat must implement move()' }
+      if (p.objects.length < 2) return { pass: false, msg: 'Create at least a Car and a Boat object' }
+      const moveCalls = p.calls.filter((c) => c.method === 'move')
+      const descCalls = p.calls.filter((c) => c.method === 'describe')
+      if (moveCalls.length < 2) return { pass: false, msg: 'Call move() on both Car and Boat' }
+      if (descCalls.length < 2) return { pass: false, msg: 'Call describe() on both Car and Boat' }
+      return { pass: true, msg: 'Abstraction mastered! Same interface, hidden differences.' }
+    },
+  },
+
+  // ─── CHAPTER 18: HashMap ───
+  {
+    id: 18, title: 'Chapter 18: The War Map', concept: 'HashMap — Key-Value Pairs',
+    description: 'A general needs a map of enemy positions! Create a HashMap<String, Integer> mapping location names to enemy counts. Add at least 3 entries with put(). Then retrieve one value with get() and print the entire map!',
+    hints: [
+      'HashMap stores key-value pairs. Declare: HashMap<String, Integer> enemyMap = new HashMap<>();',
+      'Add entries: enemyMap.put("Forest", 12); Retrieve: enemyMap.get("Forest") returns 12.',
+      'Print the whole map: System.out.println(enemyMap); — it prints all key-value pairs automatically.',
+    ],
+    starter: '// Create HashMap<String, Integer> for enemy positions\n\n// Add at least 3 locations with put()\n\n// Get one value and print it\n// Print the entire map\n',
+    validate(p) {
+      const hasImport = true // auto-wrapped by compiler with java.util.*
+      const hasHashMap = p.classes.length === 0 // no custom classes needed
+      const puts = p.calls.filter((c) => c.method === 'put')
+      if (puts.length < 3) return { pass: false, msg: `Add at least 3 entries with put() (${puts.length} so far)` }
+      const gets = p.calls.filter((c) => c.method === 'get')
+      if (gets.length < 1) return { pass: false, msg: 'Retrieve a value using get()' }
+      const prints = p.calls.filter((c) => c.obj === '__sysout__')
+      if (prints.length < 1) return { pass: false, msg: 'Print the map or a retrieved value!' }
+      return { pass: true, msg: 'The war map is drawn! HashMap mastered — every location tracked.' }
+    },
+  },
+
+  // ─── CHAPTER 19: Wrapper Classes & Autoboxing ───
+  {
+    id: 19, title: 'Chapter 19: The Wrapper\'s Gift', concept: 'Wrapper Classes & Autoboxing',
+    description: 'Primitive types (int, double) can\'t go into collections directly — they need wrappers! Create an ArrayList<Integer>, add 5 numbers using autoboxing (just add ints — Java wraps them automatically). Then loop through and print each. Also demonstrate Integer.parseInt() by converting a String "42" to int!',
+    hints: [
+      'ArrayList<Integer> numbers = new ArrayList<>(); — Integer is the wrapper for int.',
+      'numbers.add(10); — Java autoboxes the int 10 into an Integer automatically.',
+      'int x = Integer.parseInt("42"); converts the String "42" into the int 42.',
+    ],
+    starter: '// Create ArrayList<Integer>\n\n// Add 5 numbers (autoboxing handles int → Integer)\n\n// Loop and print each number\n\n// Parse a String to int:\n// int parsed = Integer.parseInt("42");\n// Print it!\n',
+    validate(p) {
+      const coll = p.collections.find((c) => c.elemType === 'Integer')
+      if (!coll) return { pass: false, msg: 'Create an ArrayList<Integer>' }
+      const adds = p.calls.filter((c) => c.method === 'add')
+      if (adds.length < 5) return { pass: false, msg: `Add at least 5 numbers (${adds.length} so far)` }
+      const loop = p.calls.find((c) => c.isLoop)
+      if (!loop) return { pass: false, msg: 'Use a for-each loop to print each number' }
+      const prints = p.calls.filter((c) => c.obj === '__sysout__')
+      if (prints.length < 1) return { pass: false, msg: 'Print the parsed value!' }
+      return { pass: true, msg: 'Wrapper classes unlocked! Primitives and objects work as one.' }
     },
   },
 ]

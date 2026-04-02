@@ -38,6 +38,29 @@ async function runValidation(
     return { ...ck, output: r.output, errors: r.errors, time: r.executionTime }
   }
 
+  // predict: compile the GIVEN code, check if student's typed prediction matches actual output
+  if (v.type === 'predict') {
+    const r = await compileCode(v.code, v.stdin)
+    if (!r.success) return fail('The code has an error (this is a bug in the challenge)', r)
+    const actual = r.output.trim()
+    const prediction = code.trim() // student types their prediction in the editor
+    if (prediction === actual)
+      return { pass: true, msg: 'Correct prediction! You read the code perfectly.', output: actual, errors: '', time: r.executionTime }
+    return { pass: false, msg: `Not quite. The actual output is: ${actual}`, output: actual, errors: '', time: r.executionTime }
+  }
+
+  // bugfix: student edits broken code, validate it compiles and gives expected output
+  if (v.type === 'bugfix') {
+    const r = await compileCode(code, v.stdin)
+    if (!r.success) return fail(`Still has errors: ${r.errors.split('\n')[0]}`, r)
+    const ok = r.output.trim() === v.expected.trim()
+    return {
+      pass: ok,
+      msg: ok ? 'Bug squashed! The code works correctly now.' : `Code compiles but output is wrong. Expected: "${v.expected.trim()}", got: "${r.output.trim()}"`,
+      output: r.output, errors: r.errors, time: r.executionTime,
+    }
+  }
+
   const r = await compileCode(code, undefined)
 
   if (v.type === 'compiles')
@@ -245,10 +268,49 @@ export default function UnitPage({ unit, onHome }: { unit: UnitDef; onHome: () =
             </div>
           </div>
 
-          {/* Editor */}
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <CodeEditor value={code} onChange={handleCode} onRun={run} fontSize={16} />
-          </div>
+          {/* Editor — or predict UI */}
+          {ch.validate.type === 'predict' ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {/* Read-only code display */}
+              <div style={{
+                flex: 1, padding: '12px 16px', overflow: 'auto', fontFamily: 'JetBrains Mono',
+                fontSize: 15, lineHeight: 1.7, color: '#a0b0c8', background: '#0a0e14',
+                whiteSpace: 'pre-wrap', borderBottom: `1px solid ${C.border}`,
+              }} className="jq-scroll">
+                {ch.validate.code}
+              </div>
+              {/* Prediction input */}
+              <div style={{ flexShrink: 0, padding: '10px 14px', background: C.surfaceAlt }}>
+                <div style={{ fontSize: 12, color: accent, fontFamily: 'JetBrains Mono', fontWeight: 700, marginBottom: 6, letterSpacing: 1 }}>
+                  YOUR PREDICTION — what will this code print?
+                </div>
+                <textarea
+                  value={code}
+                  onChange={(e) => handleCode(e.target.value)}
+                  onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') run() }}
+                  rows={3}
+                  style={{
+                    width: '100%', padding: '8px 12px', fontFamily: 'JetBrains Mono', fontSize: 15,
+                    background: '#0d1117', color: C.text, border: `1px solid ${C.border}`,
+                    borderRadius: 6, resize: 'vertical', outline: 'none',
+                  }}
+                  placeholder="Type what you think the output will be..."
+                />
+              </div>
+            </div>
+          ) : (
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              {ch.validate.type === 'bugfix' && (
+                <div style={{
+                  padding: '6px 14px', background: '#2a1510', borderBottom: `1px solid #5a3020`,
+                  fontSize: 13, fontFamily: 'JetBrains Mono', color: '#ff8c5a', flexShrink: 0,
+                }}>
+                  🐛 This code has a bug! Find and fix it.
+                </div>
+              )}
+              <CodeEditor value={code} onChange={handleCode} onRun={run} fontSize={16} />
+            </div>
+          )}
 
           {/* Validation bar */}
           <div style={{

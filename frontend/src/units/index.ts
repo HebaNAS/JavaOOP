@@ -43,7 +43,7 @@ export const UNITS = [
     subtitle: 'Objects, Classes & Inheritance (Units 7–9)',
     theme: { primary: '#ff6b35', bg: '#1f170e', icon: '⚔️' },
     path: '/arena',
-    total: 15,
+    total: 19,
     available: true,
   },
   placeholder(10, 'The Shadow Realm', 'Exceptions & Strings', '#9C27B0', '#180e1f', '👻', '/unit/10', 8),

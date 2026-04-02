@@ -230,5 +230,45 @@ export const UNIT_6: UnitDef = {
       },
       xp: 125,
     },
+
+    // ─── BONUS: Predict the Output ───
+    {
+      title: 'The Diviner\'s Challenge',
+      concept: 'Predict the Output',
+      description:
+        'The Grand Diviner presents you with a scroll. "Two methods, one call. What does this print?"\n\n' +
+        'Trace through carefully — method calls and return values matter!',
+      hints: [
+        'add(3, 4) returns 7. That return value is stored in result.',
+        'isEven(7) checks 7 % 2 == 0 — is 7 even?',
+        'result = 7, isEven returns false. Two println calls.',
+      ],
+      starter: '',
+      validate: {
+        type: 'predict',
+        code: 'int add(int a, int b) {\n    return a + b;\n}\n\nboolean isEven(int n) {\n    return n % 2 == 0;\n}\n\nint result = add(3, 4);\nSystem.out.println("Sum: " + result);\nSystem.out.println("Even: " + isEven(result));',
+      },
+      xp: 75,
+    },
+
+    // ─── BONUS: Find the Bug ───
+    {
+      title: 'The Broken Scroll',
+      concept: 'Find & Fix the Bug',
+      description:
+        'This scroll should calculate the area of a rectangle, but it returns the wrong answer!\n\n' +
+        'Fix the method so it prints:\nArea: 35',
+      hints: [
+        'Look at the formula inside the method — what operation does it use?',
+        'It says width + height — that gives the perimeter part, not the area.',
+        'Area = width * height, not width + height. Change + to *.',
+      ],
+      starter: 'int area(int width, int height) {\n    return width + height;  // BUG HERE\n}\n\nint result = area(5, 7);\nSystem.out.println("Area: " + result);\n',
+      validate: {
+        type: 'bugfix',
+        expected: 'Area: 35',
+      },
+      xp: 75,
+    },
   ],
 }

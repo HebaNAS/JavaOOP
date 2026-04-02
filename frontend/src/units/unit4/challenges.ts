@@ -212,5 +212,57 @@ export const UNIT_4: UnitDef = {
       },
       xp: 125,
     },
+
+    // ─── BONUS: Predict the Output ───
+    {
+      title: 'The Seer\'s Trial',
+      concept: 'Predict the Output',
+      description:
+        'The Seer of the Deep shows you a piece of code. "Tell me what this prints," she whispers, "and I shall let you pass."\n\n' +
+        'Type the EXACT output — every line, every number.',
+      hints: [
+        'Trace the loop: i goes from 1 to 5. Which values hit the continue?',
+        'continue skips the rest of the loop body for that iteration — the println is skipped.',
+        'i=1 prints, i=2 is skipped (even), i=3 prints, i=4 is skipped, i=5 prints. Then "End".',
+      ],
+      starter: '',
+      validate: {
+        type: 'predict',
+        code: 'for (int i = 1; i <= 5; i++) {\n    if (i % 2 == 0) {\n        continue;\n    }\n    System.out.println(i);\n}\nSystem.out.println("End");',
+      },
+      xp: 75,
+    },
+
+    // ─── BONUS: Find the Bug ───
+    {
+      title: 'The Broken Mechanism',
+      concept: 'Find & Fix the Bug',
+      description:
+        'A mechanism in the wall should print a 3x3 grid of stars, but the inner loop is wrong — it uses the wrong variable!\n\n' +
+        'Fix it so the output is:\n* * *\n* * *\n* * *',
+      hints: [
+        'Look at the inner loop — what variable does it use for the limit?',
+        'The inner loop says j < rows but it should say j < cols (or j < 3).',
+        'Both rows and cols are 3, but using the wrong variable is the conceptual bug.',
+      ],
+      starter: 'int rows = 3;\nint cols = 3;\nfor (int i = 0; i < rows; i++) {\n    for (int j = 0; j < rows; j++) {  // BUG HERE\n        if (j > 0) System.out.print(" ");\n        System.out.print("*");\n    }\n    System.out.println();\n}\n',
+      validate: {
+        type: 'custom',
+        check: (r, code) => {
+          if (!r.success) return { pass: false, msg: r.errors.split('\n')[0] }
+          const lines = r.output.trimEnd().split('\n')
+          if (lines.length !== 3) return { pass: false, msg: `Expected 3 rows, got ${lines.length}` }
+          for (let i = 0; i < 3; i++) {
+            const stars = lines[i].trim().split(/\s+/)
+            if (stars.length !== 3 || stars.some(s => s !== '*'))
+              return { pass: false, msg: `Row ${i + 1} should have 3 stars` }
+          }
+          if (code.includes('j < rows') && !code.includes('j < cols'))
+            return { pass: false, msg: 'The inner loop still uses rows — should it use cols?' }
+          return { pass: true, msg: 'Mechanism repaired! The grid prints correctly.' }
+        },
+      },
+      xp: 75,
+    },
   ],
 }
