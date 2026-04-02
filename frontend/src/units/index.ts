@@ -1,4 +1,5 @@
 import { UNIT_2 } from './unit2/challenges'
+import { UNIT_3 } from './unit3/challenges'
 
 /** Registry of all units shown on the home page. */
 export const UNITS = [
@@ -8,7 +9,12 @@ export const UNITS = [
     total: UNIT_2.challenges.length,
     available: true,
   },
-  placeholder(3, 'The Labyrinth', 'Control Flow Statements', '#00BCD4', '#0f1f26', '🛡️', '/unit/3', 8),
+  {
+    ...pick(UNIT_3),
+    path: '/unit/3',
+    total: UNIT_3.challenges.length,
+    available: true,
+  },
   placeholder(4, 'The Deep Labyrinth', 'Complex Control Flow', '#009688', '#0f1f1f', '🌀', '/unit/4', 6),
   placeholder(5, 'The Armoury', 'Arrays', '#FF9800', '#1f1a0e', '🗡️', '/unit/5', 6),
   placeholder(6, 'The Spell Workshop', 'Methods', '#E91E63', '#1f0e18', '📜', '/unit/6', 8),
@@ -39,5 +45,6 @@ function placeholder(
 /** Lookup a unit definition by path. Returns undefined for placeholders. */
 export function getUnitDef(path: string) {
   if (path === '/unit/2') return UNIT_2
+  if (path === '/unit/3') return UNIT_3
   return undefined
 }

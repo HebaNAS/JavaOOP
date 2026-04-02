@@ -4,6 +4,7 @@ import { compileCode, CompileResult } from '../api/compiler'
 import { useUnitStore } from '../state/unitStore'
 import { UnitDef, ChallengeValidation } from './types'
 import AlchemistVisuals, { LabSounds } from './unit2/AlchemistVisuals'
+import LabyrinthVisuals, { LabyrinthSounds } from './unit3/LabyrinthVisuals'
 
 // ── Validation runner ──────────────────────────────
 
@@ -133,16 +134,19 @@ export default function UnitPage({ unit, onHome }: { unit: UnitDef; onHome: () =
   const run = useCallback(async () => {
     setRunning(true); setCompiled(false)
     setOutput(''); setErrors(''); setValMsg('')
-    LabSounds.brew()
+    const snd = unit.id === 'unit-3' ? LabyrinthSounds : LabSounds
+    if (unit.id === 'unit-3') LabyrinthSounds.footstep()
+    else LabSounds.brew()
     try {
       const res = await runValidation(code, ch.validate)
       setOutput(res.output); setErrors(res.errors)
       setValMsg(res.msg); setValPass(res.pass); setCompiled(true)
       if (res.pass) {
-        LabSounds.success()
+        snd.success()
+        if (unit.id === 'unit-3') LabyrinthSounds.doorOpen()
         if (!isDone(unit.id, idx)) complete(unit.id, idx, code, ch.xp)
       } else {
-        LabSounds.fail()
+        snd.fail()
       }
     } finally { setRunning(false) }
   }, [code, ch, unit.id, idx, complete, isDone])
@@ -310,9 +314,12 @@ export default function UnitPage({ unit, onHome }: { unit: UnitDef; onHome: () =
             </div>
           )}
 
-          {/* Alchemist visuals */}
+          {/* Unit-specific visuals */}
           {unit.id === 'unit-2' && (
             <AlchemistVisuals code={code} compiled={compiled} success={valPass} />
+          )}
+          {unit.id === 'unit-3' && (
+            <LabyrinthVisuals output={output} compiled={compiled} success={valPass} challengeIdx={idx} />
           )}
 
           {/* Output — scrollable, shares space with description */}
