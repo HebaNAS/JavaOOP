@@ -92,7 +92,7 @@ body { font-family: 'Exo 2', sans-serif; color: #d0dce8; }
 
 /* ─── EDITOR PANEL ─── */
 .editor-col {
-  width: 460px; min-width: 400px; max-width: 540px; display: flex;
+  width: 520px; min-width: 440px; max-width: 620px; display: flex;
   flex-direction: column; border-left: 1px solid #1a2744; background: #0c1018; flex-shrink: 0;
   overflow: hidden;
 }
@@ -143,9 +143,9 @@ body { font-family: 'Exo 2', sans-serif; color: #d0dce8; }
 /* ─── CODE EDITOR ─── */
 .editor-body { flex: 1; position: relative; min-height: 0; overflow: hidden; }
 .editor-body .cm-editor { height: 100%; width: 100%; font-size: 15px !important; }
-.editor-body .cm-scroller { overflow: auto !important; }
-.editor-body .cm-content { font-size: 15px !important; line-height: 1.7 !important; }
-.editor-body .cm-gutters { font-size: 14px !important; }
+.editor-body .cm-scroller { overflow: auto !important; padding: 8px 0 !important; }
+.editor-body .cm-content { font-size: 15px !important; line-height: 1.7 !important; padding: 0 12px 0 4px !important; }
+.editor-body .cm-gutters { font-size: 14px !important; padding-left: 6px !important; }
 .editor-body .cm-line { font-size: 15px !important; word-break: break-all; overflow-wrap: break-word; }
 
 /* ─── RESULT BAR ─── */

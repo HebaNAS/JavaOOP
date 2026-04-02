@@ -323,6 +323,10 @@ function GameApp() {
 
       <div className="topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => navigate('/')} style={{
+            background: 'none', border: '1px solid #2a3a5c', borderRadius: 6, color: '#7a9aba',
+            padding: '4px 12px', cursor: 'pointer', fontFamily: 'JetBrains Mono', fontSize: 14,
+          }}>← Home</button>
           <span className="topbar-title">OOP QUEST</span>
           <span style={{ color: '#1a2744', fontSize: 20 }}>│</span>
           <span className="topbar-quest">{chapter.concept}</span>
