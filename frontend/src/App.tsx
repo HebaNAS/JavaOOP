@@ -17,6 +17,9 @@ import ClassroomNav from './ui/classroom/ClassroomNav'
 import SubmitButton from './ui/classroom/SubmitButton'
 import Leaderboard from './ui/classroom/Leaderboard'
 import InstructorPage from './ui/classroom/InstructorPage'
+import HomePage from './units/HomePage'
+import UnitPage from './units/UnitPage'
+import { getUnitDef } from './units/index'
 
 function chapterXP(index: number): number {
   if (index < 5) return 100
@@ -24,8 +27,12 @@ function chapterXP(index: number): number {
   return 300
 }
 
+function navigate(path: string) {
+  window.history.pushState({}, '', path)
+  window.dispatchEvent(new PopStateEvent('popstate'))
+}
+
 export default function App() {
-  // ─── Instructor page via /instructor path ───
   const [pathname, setPathname] = useState(window.location.pathname)
   useEffect(() => {
     const onPop = () => setPathname(window.location.pathname)
@@ -33,9 +40,20 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
+  // ── Route: Instructor panel ──
   if (pathname === '/instructor') return <InstructorPage />
 
-  return <GameApp />
+  // ── Route: Unit pages ──
+  if (pathname.startsWith('/unit/')) {
+    const unitDef = getUnitDef(pathname)
+    if (unitDef) return <UnitPage unit={unitDef} onHome={() => navigate('/')} />
+  }
+
+  // ── Route: Battle Arena ──
+  if (pathname === '/arena') return <GameApp />
+
+  // ── Route: Home page (default) ──
+  return <HomePage onNavigate={navigate} />
 }
 
 function GameApp() {
