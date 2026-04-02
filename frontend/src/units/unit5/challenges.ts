@@ -75,8 +75,13 @@ export const UNIT_5: UnitDef = {
       ],
       starter: 'int[] prices = {120, 85, 200, 50, 175};\n\n// Calculate total and average\n',
       validate: {
-        type: 'output',
-        expected: 'Total: 630\nAverage: 126\n',
+        type: 'custom',
+        check: (r) => {
+          if (!r.success) return { pass: false, msg: r.errors.split('\n')[0] }
+          if (!r.output.includes('630')) return { pass: false, msg: 'Total should be 630' }
+          if (!/126(\.0)?/.test(r.output)) return { pass: false, msg: 'Average should be 126 (630 / 5)' }
+          return { pass: true, msg: 'The ledger balances — every coin accounted for!' }
+        },
       },
       xp: 100,
     },
