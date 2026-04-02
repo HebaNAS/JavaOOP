@@ -1,17 +1,28 @@
-import { useUnitStore } from '../state/unitStore'
+import { useEffect } from 'react'
+import { useUnitStore, ALL_ACHIEVEMENTS } from '../state/unitStore'
 import { useChapterStore } from '../state/chapterStore'
 import { UNITS } from './index'
 
 const C = {
-  pageBg:   '#0d1117',
-  surface:  '#161d2b',
-  border:   '#30405c',
-  text:     '#f0f4fa',
-  textBody: '#d0dae8',
-  textMuted:'#8899b4',
-  success:  '#5cd98e',
-  warn:     '#ffc04d',
+  pageBg: '#0d1117', surface: '#161d2b', border: '#30405c',
+  text: '#f0f4fa', textBody: '#d0dae8', textMuted: '#8899b4',
+  success: '#5cd98e', warn: '#ffc04d',
 }
+
+// ── LO8 Pro Tips (IDE, Debugging, Version Control) ──
+
+const PRO_TIPS = [
+  { icon: '💻', text: 'Use an IDE like IntelliJ IDEA or VS Code with Java extensions for autocompletion and error highlighting.' },
+  { icon: '🐞', text: 'When code behaves unexpectedly, use System.out.println() to print variable values — this is called "print debugging".' },
+  { icon: '🔀', text: 'Version control (Git) tracks every change you make. Learn: git add, git commit, git push.' },
+  { icon: '🔍', text: 'IDEs can set "breakpoints" — pausing your program mid-execution so you can inspect variables.' },
+  { icon: '📂', text: 'Organise your Java files in packages. Each .java file should have one public class matching the filename.' },
+  { icon: '🧪', text: 'Write test cases for your methods before writing the implementation — this is called Test-Driven Development.' },
+  { icon: '⌨️', text: 'Learn IDE shortcuts: Ctrl+Space (autocomplete), Ctrl+/ (comment), F5 (debug run) save hours of work.' },
+  { icon: '🌿', text: 'Use Git branches to experiment with changes without affecting your main code. Merge when ready.' },
+  { icon: '📋', text: 'Read compiler error messages carefully — the line number and caret (^) show exactly where the problem is.' },
+  { icon: '🔄', text: 'Commit often with meaningful messages: "Add Warrior attack method" is better than "update stuff".' },
+]
 
 interface Props { onNavigate: (path: string) => void }
 
@@ -19,6 +30,18 @@ export default function HomePage({ onNavigate }: Props) {
   const unitProgress = useUnitStore((s) => s.completed)
   const arenaCompleted = useChapterStore((s) => s.completedChapters)
   const totalXP = useUnitStore((s) => s.xp) + useChapterStore((s) => s.xp)
+  const achievements = useUnitStore((s) => s.achievements)
+  const streak = useUnitStore((s) => s.streakDays)
+  const recordActivity = useUnitStore((s) => s.recordActivity)
+
+  // Record daily activity on mount
+  useEffect(() => { recordActivity() }, [recordActivity])
+
+  // Pick a random pro tip
+  const tipIdx = Math.floor(Date.now() / 86400000) % PRO_TIPS.length // changes daily
+  const tip = PRO_TIPS[tipIdx]
+
+  const totalChallenges = Object.values(unitProgress).reduce((sum, arr) => sum + arr.length, 0) + arenaCompleted.length
 
   return (
     <div style={{
@@ -26,7 +49,7 @@ export default function HomePage({ onNavigate }: Props) {
       display: 'flex', flexDirection: 'column', alignItems: 'center',
     }}>
       {/* Header */}
-      <div style={{ textAlign: 'center', padding: '40px 20px 28px' }}>
+      <div style={{ textAlign: 'center', padding: '36px 20px 24px' }}>
         <div style={{
           fontFamily: 'Orbitron', fontWeight: 900, fontSize: 38,
           background: 'linear-gradient(135deg, #ff6b35, #ffc045)',
@@ -35,18 +58,75 @@ export default function HomePage({ onNavigate }: Props) {
         }}>
           SOFTWARE DEVELOPMENT 1
         </div>
-        <div style={{ fontSize: 17, color: C.textMuted, marginBottom: 18 }}>
+        <div style={{ fontSize: 17, color: C.textMuted, marginBottom: 16 }}>
           F27SA — Java OOP Quest
         </div>
-        {totalXP > 0 && (
-          <div style={{
-            display: 'inline-block', padding: '6px 18px', borderRadius: 8,
-            background: 'rgba(255,193,7,0.12)', border: '1px solid rgba(255,193,7,0.30)',
-            fontFamily: 'JetBrains Mono', fontSize: 16, color: C.warn,
-          }}>
-            Total XP: {totalXP}
+
+        {/* Stats bar */}
+        <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {totalXP > 0 && (
+            <div style={{
+              padding: '5px 16px', borderRadius: 8,
+              background: 'rgba(255,193,7,0.10)', border: '1px solid rgba(255,193,7,0.25)',
+              fontFamily: 'JetBrains Mono', fontSize: 14, color: C.warn,
+            }}>
+              ⚡ {totalXP} XP
+            </div>
+          )}
+          {totalChallenges > 0 && (
+            <div style={{
+              padding: '5px 16px', borderRadius: 8,
+              background: 'rgba(92,217,142,0.10)', border: '1px solid rgba(92,217,142,0.25)',
+              fontFamily: 'JetBrains Mono', fontSize: 14, color: C.success,
+            }}>
+              ✓ {totalChallenges} challenges
+            </div>
+          )}
+          {streak > 1 && (
+            <div style={{
+              padding: '5px 16px', borderRadius: 8,
+              background: 'rgba(255,107,53,0.10)', border: '1px solid rgba(255,107,53,0.25)',
+              fontFamily: 'JetBrains Mono', fontSize: 14, color: '#ff6b35',
+            }}>
+              🔥 {streak}-day streak
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Achievements row */}
+      {achievements.length > 0 && (
+        <div style={{
+          display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap',
+          padding: '0 36px 16px', maxWidth: 1100,
+        }}>
+          {ALL_ACHIEVEMENTS.filter(a => achievements.includes(a.id)).map(a => (
+            <div key={a.id} title={`${a.title}: ${a.description}`} style={{
+              padding: '4px 12px', borderRadius: 6,
+              background: C.surface, border: `1px solid ${C.border}`,
+              fontFamily: 'JetBrains Mono', fontSize: 12, color: C.textBody,
+              cursor: 'default',
+            }}>
+              {a.icon} {a.title}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* LO8 Pro Tip */}
+      <div style={{
+        maxWidth: 1100, width: '100%', padding: '0 36px 16px',
+      }}>
+        <div style={{
+          padding: '10px 18px', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 12,
+          background: 'rgba(77,166,255,0.06)', border: '1px solid rgba(77,166,255,0.18)',
+        }}>
+          <span style={{ fontSize: 20, flexShrink: 0 }}>{tip.icon}</span>
+          <div>
+            <span style={{ fontSize: 11, color: '#4da6ff', fontFamily: 'JetBrains Mono', fontWeight: 700, letterSpacing: 1 }}>PRO TIP — </span>
+            <span style={{ fontSize: 13, color: C.textBody }}>{tip.text}</span>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Unit grid */}
@@ -85,7 +165,6 @@ export default function HomePage({ onNavigate }: Props) {
                   transition: 'width .5s',
                 }} />
               )}
-
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                 <span style={{ fontSize: 34 }}>{u.theme.icon}</span>
                 <div>

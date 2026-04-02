@@ -8,6 +8,7 @@ import LabyrinthVisuals, { LabyrinthSounds } from './unit3/LabyrinthVisuals'
 import DeepLabyrinthVisuals, { DeepSounds } from './unit4/DeepLabyrinthVisuals'
 import ArmouryVisuals, { ArmourySounds } from './unit5/ArmouryVisuals'
 import SpellWorkshopVisuals, { WorkshopSounds } from './unit6/SpellWorkshopVisuals'
+import ShadowRealmVisuals, { ShadowSounds } from './unit10/ShadowRealmVisuals'
 
 // ── Validation runner ──────────────────────────────
 
@@ -132,7 +133,7 @@ export default function UnitPage({ unit, onHome }: { unit: UnitDef; onHome: () =
   const [compiled, setCompiled] = useState(false)
   const outRef = useRef<HTMLDivElement>(null)
 
-  const { complete, saveDraft, getDraft, getSolution, isDone } = useUnitStore()
+  const { complete, saveDraft, getDraft, getSolution, isDone, recordActivity, earnAchievement } = useUnitStore()
   const ch = unit.challenges[idx]
   const done = isDone(unit.id, idx)
 
@@ -162,8 +163,9 @@ export default function UnitPage({ unit, onHome }: { unit: UnitDef; onHome: () =
   const run = useCallback(async () => {
     setRunning(true); setCompiled(false)
     setOutput(''); setErrors(''); setValMsg('')
-    const snd = unit.id === 'unit-6' ? WorkshopSounds : unit.id === 'unit-5' ? ArmourySounds : unit.id === 'unit-4' ? DeepSounds : unit.id === 'unit-3' ? LabyrinthSounds : LabSounds
-    if (unit.id === 'unit-6') WorkshopSounds.scrollUnroll()
+    const snd = unit.id === 'unit-10' ? ShadowSounds : unit.id === 'unit-6' ? WorkshopSounds : unit.id === 'unit-5' ? ArmourySounds : unit.id === 'unit-4' ? DeepSounds : unit.id === 'unit-3' ? LabyrinthSounds : LabSounds
+    if (unit.id === 'unit-10') ShadowSounds.portalHum()
+    else if (unit.id === 'unit-6') WorkshopSounds.scrollUnroll()
     else if (unit.id === 'unit-5') ArmourySounds.sheathe()
     else if (unit.id === 'unit-4') DeepSounds.footstep()
     else if (unit.id === 'unit-3') LabyrinthSounds.footstep()
@@ -178,7 +180,13 @@ export default function UnitPage({ unit, onHome }: { unit: UnitDef; onHome: () =
         if (unit.id === 'unit-4') DeepSounds.breakOut()
         if (unit.id === 'unit-5') ArmourySounds.metalClang()
         if (unit.id === 'unit-6') WorkshopSounds.spellCast()
-        if (!isDone(unit.id, idx)) complete(unit.id, idx, code, ch.xp)
+        if (unit.id === 'unit-10') ShadowSounds.catchShield()
+        if (!isDone(unit.id, idx)) {
+          complete(unit.id, idx, code, ch.xp)
+          if (ch.validate.type === 'bugfix') earnAchievement('bug-squasher')
+          if (ch.validate.type === 'predict') earnAchievement('oracle')
+        }
+        recordActivity()
       } else {
         snd.fail()
       }
@@ -402,6 +410,9 @@ export default function UnitPage({ unit, onHome }: { unit: UnitDef; onHome: () =
           )}
           {unit.id === 'unit-6' && (
             <SpellWorkshopVisuals code={code} compiled={compiled} success={valPass} />
+          )}
+          {unit.id === 'unit-10' && (
+            <ShadowRealmVisuals output={output} compiled={compiled} success={valPass} challengeIdx={idx} />
           )}
 
           {/* Output — scrollable, shares space with description */}

@@ -3,6 +3,7 @@ import { UNIT_3 } from './unit3/challenges'
 import { UNIT_4 } from './unit4/challenges'
 import { UNIT_5 } from './unit5/challenges'
 import { UNIT_6 } from './unit6/challenges'
+import { UNIT_10 } from './unit10/challenges'
 
 /** Registry of all units shown on the home page. */
 export const UNITS = [
@@ -46,7 +47,12 @@ export const UNITS = [
     total: 19,
     available: true,
   },
-  placeholder(10, 'The Shadow Realm', 'Exceptions & Strings', '#9C27B0', '#180e1f', '👻', '/unit/10', 8),
+  {
+    ...pick(UNIT_10),
+    path: '/unit/10',
+    total: UNIT_10.challenges.length,
+    available: true,
+  },
 ]
 
 function pick(u: { id: string; number: number; title: string; subtitle: string; theme: { primary: string; bg: string; icon: string } }) {
@@ -67,5 +73,6 @@ export function getUnitDef(path: string) {
   if (path === '/unit/4') return UNIT_4
   if (path === '/unit/5') return UNIT_5
   if (path === '/unit/6') return UNIT_6
+  if (path === '/unit/10') return UNIT_10
   return undefined
 }
