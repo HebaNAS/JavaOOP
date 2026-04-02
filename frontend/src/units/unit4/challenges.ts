@@ -192,14 +192,23 @@ export const UNIT_4: UnitDef = {
       ],
       starter: 'Scanner sc = new Scanner(System.in);\nint height = sc.nextInt();\n\n// Build the staircase\n',
       validate: {
-        type: 'testCases',
-        cases: [
-          {
-            stdin: '5',
-            expected: '*\n**\n***\n****\n*****\n',
-            label: 'height = 5',
-          },
-        ],
+        type: 'custom',
+        stdin: '5',
+        check: (r, code) => {
+          if (!r.success) return { pass: false, msg: r.errors.split('\n')[0] }
+          const lines = r.output.trimEnd().split('\n')
+          if (lines.length < 5) return { pass: false, msg: `Expected 5 rows, got ${lines.length}` }
+          for (let i = 0; i < 5; i++) {
+            const stars = lines[i].replace(/\s/g, '').length
+            if (stars !== i + 1)
+              return { pass: false, msg: `Row ${i + 1} should have ${i + 1} star(s), got ${stars}` }
+            if (lines[i].replace(/[\s*]/g, '').length > 0)
+              return { pass: false, msg: `Row ${i + 1} should only contain * characters` }
+          }
+          if (!code.includes('for') || code.indexOf('for') === code.lastIndexOf('for'))
+            return { pass: false, msg: 'Use two nested for loops (one inside the other)' }
+          return { pass: true, msg: 'The staircase is rebuilt — you ascend to the next level!' }
+        },
       },
       xp: 125,
     },
