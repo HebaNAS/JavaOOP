@@ -15,13 +15,13 @@ body { font-family: 'Exo 2', sans-serif; color: #d0dce8; }
   border-bottom: 1px solid #1a2744; flex-shrink: 0; z-index: 10;
 }
 .topbar-title {
-  font-family: 'Orbitron', sans-serif; font-size: 28px; font-weight: 800;
+  font-family: 'Orbitron', sans-serif; font-size: 22px; font-weight: 800;
   background: linear-gradient(135deg, #ff6b35, #ffc045);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   letter-spacing: 1.5px;
 }
 .topbar-quest {
-  font-size: 18px; color: #7a9aba; font-family: 'JetBrains Mono', monospace;
+  font-size: 16px; color: #7a9aba; font-family: 'JetBrains Mono', monospace;
   font-weight: 500;
 }
 
@@ -94,6 +94,7 @@ body { font-family: 'Exo 2', sans-serif; color: #d0dce8; }
 .editor-col {
   width: 460px; min-width: 400px; max-width: 540px; display: flex;
   flex-direction: column; border-left: 1px solid #1a2744; background: #0c1018; flex-shrink: 0;
+  overflow: hidden;
 }
 .editor-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -140,12 +141,12 @@ body { font-family: 'Exo 2', sans-serif; color: #d0dce8; }
 .hint-panel button:hover { background: rgba(255,192,69,.2); border-color: #6a5a20; }
 
 /* ─── CODE EDITOR ─── */
-.editor-body { flex: 1; position: relative; min-height: 0; overflow: auto; }
-.editor-body .cm-editor { height: 100%; font-size: 15px !important; }
+.editor-body { flex: 1; position: relative; min-height: 0; overflow: hidden; }
+.editor-body .cm-editor { height: 100%; width: 100%; font-size: 15px !important; }
 .editor-body .cm-scroller { overflow: auto !important; }
 .editor-body .cm-content { font-size: 15px !important; line-height: 1.7 !important; }
 .editor-body .cm-gutters { font-size: 14px !important; }
-.editor-body .cm-line { font-size: 15px !important; }
+.editor-body .cm-line { font-size: 15px !important; word-break: break-all; overflow-wrap: break-word; }
 
 /* ─── RESULT BAR ─── */
 .result-bar {
