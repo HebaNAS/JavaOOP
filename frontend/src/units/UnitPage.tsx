@@ -29,6 +29,13 @@ async function runValidation(
     return { pass: true, msg: `All ${v.cases.length} tests passed!`, output: lastOutput, errors: '', time: 0 }
   }
 
+  // custom gets its own compile call (may need stdin)
+  if (v.type === 'custom') {
+    const r = await compileCode(code, v.stdin)
+    const ck = v.check(r, code)
+    return { ...ck, output: r.output, errors: r.errors, time: r.executionTime }
+  }
+
   const r = await compileCode(code, undefined)
 
   if (v.type === 'compiles')
@@ -54,11 +61,6 @@ async function runValidation(
       msg: ok ? 'Output matches!' : `Output doesn't match expected format`,
       output: r.output, errors: '', time: r.executionTime,
     }
-  }
-
-  if (v.type === 'custom') {
-    const ck = v.check(r, code)
-    return { ...ck, output: r.output, errors: r.errors, time: r.executionTime }
   }
 
   return fail('Unknown validation type')

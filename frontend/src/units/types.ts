@@ -15,7 +15,7 @@ export type ChallengeValidation =
   | { type: 'outputMatch'; pattern: RegExp }
   | { type: 'compiles' }
   | { type: 'testCases'; cases: TestCase[] }
-  | { type: 'custom'; check: (result: CompileResult, code: string) => { pass: boolean; msg: string } }
+  | { type: 'custom'; stdin?: string; check: (result: CompileResult, code: string) => { pass: boolean; msg: string } }
 
 export interface TestCase {
   stdin?: string

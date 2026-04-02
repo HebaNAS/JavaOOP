@@ -156,6 +156,7 @@ export const UNIT_4: UnitDef = {
       starter: 'Scanner sc = new Scanner(System.in);\nint rows = sc.nextInt();\nint cols = sc.nextInt();\n\n// Nested loop: print the grid\n',
       validate: {
         type: 'custom',
+        stdin: '3\n4',
         check: (r, code) => {
           if (!r.success) return { pass: false, msg: r.errors.split('\n')[0] }
           const lines = r.output.trimEnd().split('\n')
