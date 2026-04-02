@@ -2,6 +2,7 @@ import { UNIT_2 } from './unit2/challenges'
 import { UNIT_3 } from './unit3/challenges'
 import { UNIT_4 } from './unit4/challenges'
 import { UNIT_5 } from './unit5/challenges'
+import { UNIT_6 } from './unit6/challenges'
 
 /** Registry of all units shown on the home page. */
 export const UNITS = [
@@ -29,7 +30,12 @@ export const UNITS = [
     total: UNIT_5.challenges.length,
     available: true,
   },
-  placeholder(6, 'The Spell Workshop', 'Methods', '#E91E63', '#1f0e18', '📜', '/unit/6', 8),
+  {
+    ...pick(UNIT_6),
+    path: '/unit/6',
+    total: UNIT_6.challenges.length,
+    available: true,
+  },
   {
     id: 'arena',
     number: 7,
@@ -60,5 +66,6 @@ export function getUnitDef(path: string) {
   if (path === '/unit/3') return UNIT_3
   if (path === '/unit/4') return UNIT_4
   if (path === '/unit/5') return UNIT_5
+  if (path === '/unit/6') return UNIT_6
   return undefined
 }
