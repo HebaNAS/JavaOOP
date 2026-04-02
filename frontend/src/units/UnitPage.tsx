@@ -6,6 +6,7 @@ import { UnitDef, ChallengeValidation } from './types'
 import AlchemistVisuals, { LabSounds } from './unit2/AlchemistVisuals'
 import LabyrinthVisuals, { LabyrinthSounds } from './unit3/LabyrinthVisuals'
 import DeepLabyrinthVisuals, { DeepSounds } from './unit4/DeepLabyrinthVisuals'
+import ArmouryVisuals, { ArmourySounds } from './unit5/ArmouryVisuals'
 
 // ── Validation runner ──────────────────────────────
 
@@ -137,8 +138,9 @@ export default function UnitPage({ unit, onHome }: { unit: UnitDef; onHome: () =
   const run = useCallback(async () => {
     setRunning(true); setCompiled(false)
     setOutput(''); setErrors(''); setValMsg('')
-    const snd = unit.id === 'unit-4' ? DeepSounds : unit.id === 'unit-3' ? LabyrinthSounds : LabSounds
-    if (unit.id === 'unit-4') DeepSounds.footstep()
+    const snd = unit.id === 'unit-5' ? ArmourySounds : unit.id === 'unit-4' ? DeepSounds : unit.id === 'unit-3' ? LabyrinthSounds : LabSounds
+    if (unit.id === 'unit-5') ArmourySounds.sheathe()
+    else if (unit.id === 'unit-4') DeepSounds.footstep()
     else if (unit.id === 'unit-3') LabyrinthSounds.footstep()
     else LabSounds.brew()
     try {
@@ -149,6 +151,7 @@ export default function UnitPage({ unit, onHome }: { unit: UnitDef; onHome: () =
         snd.success()
         if (unit.id === 'unit-3') LabyrinthSounds.doorOpen()
         if (unit.id === 'unit-4') DeepSounds.breakOut()
+        if (unit.id === 'unit-5') ArmourySounds.metalClang()
         if (!isDone(unit.id, idx)) complete(unit.id, idx, code, ch.xp)
       } else {
         snd.fail()
@@ -328,6 +331,9 @@ export default function UnitPage({ unit, onHome }: { unit: UnitDef; onHome: () =
           )}
           {unit.id === 'unit-4' && (
             <DeepLabyrinthVisuals output={output} compiled={compiled} success={valPass} challengeIdx={idx} />
+          )}
+          {unit.id === 'unit-5' && (
+            <ArmouryVisuals output={output} compiled={compiled} success={valPass} challengeIdx={idx} code={code} />
           )}
 
           {/* Output — scrollable, shares space with description */}
