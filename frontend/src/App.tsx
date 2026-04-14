@@ -168,6 +168,7 @@ function GameApp() {
       code, parsed, trace,
       compileSuccess: true,
       stdoutNonTrace: trace.cleanStdout,
+      chapterIndex: currentChapter,
     })
     tips.slice(0, 4).forEach((t) => addLog(t.text, t.color))
 

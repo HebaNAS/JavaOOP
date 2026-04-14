@@ -17,7 +17,27 @@ export interface DiagInput {
   trace: TraceResult
   compileSuccess: boolean
   stdoutNonTrace: string // cleanStdout from trace parse
+  /**
+   * 0-based chapter index for the Arena flow. Used to gate tips behind
+   * the concepts that have been taught so far:
+   *   ch 0 (Classes & Attributes) — declaring only, no objects/methods
+   *   ch 1 (Constructors)          — parameters, `this`
+   *   ch 2 (Objects)               — `new` keyword first introduced
+   *   ch 3 (Methods)               — attack/defend first introduced
+   *   ch 4+ (Encapsulation, inheritance, polymorphism, collections, ...)
+   * Omit (or pass -1) to disable chapter gating (e.g. for unit exercises).
+   */
+  chapterIndex?: number
 }
+
+// Minimum chapter at which each tip-kind becomes pedagogically appropriate.
+// Use the index of the chapter that FIRST INTRODUCES the concept.
+const MIN_CHAPTER = {
+  objectsRequired: 2,     // `new` is introduced in chapter 3
+  methodsRequired: 3,     // calling methods on objects is chapter 4
+  attackBehavior:  3,     // attack method body is chapter 4
+  methodUnused:    3,     // "defined but never called" only matters after methods are taught
+} as const
 
 // ── Helpers ──────────────────────────────────────────
 const TIP_COLORS = {
@@ -135,62 +155,67 @@ export function diagnose(input: DiagInput): Tip[] {
   const tips: Tip[] = []
   const { code, parsed, trace, compileSuccess, stdoutNonTrace } = input
   const counts = trace.eventCounts
+  const ch = input.chapterIndex ?? Infinity  // undefined = no gating (units)
+  const gate = (min: number) => ch === Infinity || ch >= min
 
-  // Pass any runtime warnings emitted by Arena helper
+  // Runtime warnings from the Arena helper — always relevant
   for (const w of trace.warnings) {
-    tips.push({ severity: 'warn', text: `🪧 Arena warning: ${w}`, color: TIP_COLORS.warn })
+    tips.push({ severity: 'warn', text: `🪧 Arena: ${w}`, color: TIP_COLORS.warn })
   }
 
   if (!compileSuccess) return tips // compile errors are handled separately
 
-  // Student created objects but never called any method on them → nothing
-  // happens in the arena because the backend only animates on method entry.
   const newExpr = /new\s+([A-Z]\w*)\s*\(/g
   const instantiatedTypes = new Set<string>()
   for (const m of code.matchAll(newExpr)) instantiatedTypes.add(m[1])
 
-  // Method defined but never invoked
-  for (const cls of parsed.classes) {
-    for (const m of cls.methods) {
-      if (['attack', 'castSpell', 'shoot', 'heal', 'defend'].includes(m.name)) {
-        const everCalled = parsed.calls.some((c) => c.method === m.name)
-        if (!everCalled) {
-          tips.push({
-            severity: 'info', color: TIP_COLORS.info,
-            text: `ℹ️ You defined ${cls.name}.${m.name}() but never call it. Methods only run when invoked — try \`yourObj.${m.name}(...)\`.`,
-          })
+  // "method defined but never called" — only once methods are taught
+  if (gate(MIN_CHAPTER.methodUnused)) {
+    for (const cls of parsed.classes) {
+      for (const m of cls.methods) {
+        if (['attack', 'castSpell', 'shoot', 'heal', 'defend'].includes(m.name)) {
+          const everCalled = parsed.calls.some((c) => c.method === m.name)
+          if (!everCalled) {
+            tips.push({
+              severity: 'info', color: TIP_COLORS.info,
+              text: `ℹ️ You defined ${cls.name}.${m.name}() but never call it. Methods only run when invoked — try \`yourObj.${m.name}(...)\`.`,
+            })
+          }
         }
       }
     }
   }
 
-  // Attack method exists but doesn't seem to change any target's health.
-  // Accepts any variable name (target, enemy, foo) and any decrement form:
-  //   target.health = target.health - ...
-  //   target.health -= ...
-  //   enemy.health--
-  const atkMethod = parsed.classes.flatMap((c) => c.methods).find((m) => m.name === 'attack')
-  if (atkMethod) {
-    const decrementsHealth =
-      /\b\w+\s*\.\s*(?:health|hp)\s*(?:-=|=\s*[\w.]+\s*\.\s*(?:health|hp)\s*-|--)/.test(code)
-    if (!decrementsHealth) {
-      tips.push({
-        severity: 'hint', color: TIP_COLORS.hint,
-        text: "💡 Your attack() doesn't seem to reduce the target's health. The classic pattern is `target.health -= this.attackPower;` (shorthand for subtract-and-assign).",
-      })
+  // "attack doesn't reduce health" — only after attack() is taught
+  if (gate(MIN_CHAPTER.attackBehavior)) {
+    const atkMethod = parsed.classes.flatMap((c) => c.methods).find((m) => m.name === 'attack')
+    if (atkMethod) {
+      const decrementsHealth =
+        /\b\w+\s*\.\s*(?:health|hp)\s*(?:-=|=\s*[\w.]+\s*\.\s*(?:health|hp)\s*-|--)/.test(code)
+      if (!decrementsHealth) {
+        tips.push({
+          severity: 'hint', color: TIP_COLORS.hint,
+          text: "💡 Your attack() doesn't seem to reduce the target's health. The classic pattern is `target.health -= this.attackPower;` (shorthand for subtract-and-assign).",
+        })
+      }
     }
   }
 
-  // Compiled & ran but emitted nothing — student defined classes but
-  // didn't create or use any objects.
+  // "nothing ran in the arena" — only suggest creating objects once
+  // `new` has been introduced, and only suggest method calls once methods
+  // have been introduced.
   const totalTraceEvents = Object.values(counts).reduce((a, b) => a + b, 0)
   if (totalTraceEvents === 0) {
-    if (instantiatedTypes.size === 0) {
+    if (instantiatedTypes.size === 0 && gate(MIN_CHAPTER.objectsRequired)) {
       tips.push({
         severity: 'hint', color: TIP_COLORS.hint,
         text: "💡 You defined classes but never created any objects. Use `new` to make one: `Warrior hero = new Warrior(\"Aldric\", 100, 25);`",
       })
-    } else if (parsed.calls.filter((c) => c.obj !== '__sysout__').length === 0) {
+    } else if (
+      instantiatedTypes.size > 0
+      && parsed.calls.filter((c) => c.obj !== '__sysout__').length === 0
+      && gate(MIN_CHAPTER.methodsRequired)
+    ) {
       tips.push({
         severity: 'hint', color: TIP_COLORS.hint,
         text: "💡 Your object was created but you haven't called any methods on it yet. Try `hero.attack(enemy);` to see something happen.",
