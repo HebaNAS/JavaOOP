@@ -1,18 +1,47 @@
 import { execFile } from 'node:child_process'
-import { writeFile, mkdir, rm, readFile } from 'node:fs/promises'
+import { writeFile, mkdir, rm, readFile, copyFile, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import crypto from 'node:crypto'
 
-// Helper Java sources shipped alongside this module. Loaded once.
+// Helper Java sources shipped alongside this module.
 const HELPERS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'helpers')
-let ARENA_SRC: string | null = null
-async function loadArena(): Promise<string> {
-  if (ARENA_SRC === null) {
-    ARENA_SRC = await readFile(join(HELPERS_DIR, 'Arena.java'), 'utf8')
-  }
-  return ARENA_SRC
+
+// Pre-compile Arena.class ONCE at server startup. Every /api/compile
+// request then copies the precompiled class into its temp dir, so per-
+// request javac only needs to compile the student's file. This roughly
+// halves compile time on small cloud containers.
+let ARENA_CLASS_PATH: string | null = null
+let arenaPrepPromise: Promise<string> | null = null
+
+export async function prepareArena(): Promise<string> {
+  if (ARENA_CLASS_PATH) return ARENA_CLASS_PATH
+  if (arenaPrepPromise) return arenaPrepPromise
+  arenaPrepPromise = (async () => {
+    const cacheDir = join(tmpdir(), 'jq-arena-cache')
+    await mkdir(cacheDir, { recursive: true })
+    const src = join(cacheDir, 'Arena.java')
+    const cls = join(cacheDir, 'Arena.class')
+    await copyFile(join(HELPERS_DIR, 'Arena.java'), src)
+    // Skip if already compiled and up-to-date (survives warm restarts).
+    try {
+      const [ss, sc] = await Promise.all([stat(src), stat(cls)])
+      if (sc.mtimeMs >= ss.mtimeMs) {
+        ARENA_CLASS_PATH = cls
+        return cls
+      }
+    } catch { /* class missing — compile */ }
+    await new Promise<void>((resolve, reject) => {
+      execFile('javac', ['Arena.java'], { cwd: cacheDir, timeout: 60_000 }, (err, _out, stderr) => {
+        if (err) reject(new Error('Failed to precompile Arena.java: ' + (stderr || err.message)))
+        else resolve()
+      })
+    })
+    ARENA_CLASS_PATH = cls
+    return cls
+  })()
+  return arenaPrepPromise
 }
 
 // ── Types ──────────────────────────────────────────
@@ -26,7 +55,8 @@ export interface CompileResult {
 
 // ── Constants ──────────────────────────────────────
 
-const TIMEOUT_MS = 5_000
+const RUN_TIMEOUT_MS = 5_000       // student code execution
+const COMPILE_TIMEOUT_MS = 30_000  // javac itself is slow on small containers
 const MAX_OUTPUT = 50_000
 
 // ── Java availability check ────────────────────────
@@ -51,7 +81,7 @@ function exec(
     const child = execFile(
       cmd,
       args,
-      { cwd: opts.cwd, timeout: opts.timeout ?? TIMEOUT_MS, maxBuffer: 2 * 1024 * 1024 },
+      { cwd: opts.cwd, timeout: opts.timeout ?? RUN_TIMEOUT_MS, maxBuffer: 2 * 1024 * 1024 },
       (err, stdout, stderr) => {
         resolve({
           stdout: (stdout ?? '').slice(0, MAX_OUTPUT),
@@ -262,24 +292,33 @@ export async function compileAndRun(code: string, stdin?: string): Promise<Compi
   try {
     const p = prepare(code)
     await writeFile(join(dir, p.file), p.java)
-    // Always make the Arena helper available to student code.
-    await writeFile(join(dir, 'Arena.java'), await loadArena())
+    // Drop the precompiled Arena.class into the temp dir so student code
+    // linking against `Arena.*` resolves without recompiling it each time.
+    const arenaCls = await prepareArena()
+    await copyFile(arenaCls, join(dir, 'Arena.class'))
 
-    // Step 1: Compile with javac (student file + Arena helper)
-    const comp = await exec('javac', [p.file, 'Arena.java'], { cwd: dir })
+    // Step 1: Compile the student's file only. Small free-tier containers
+    // can take 10+ seconds for a cold javac — it gets a generous timeout;
+    // the student's program is held to the tight RUN_TIMEOUT_MS.
+    const comp = await exec('javac', ['-cp', dir, p.file], {
+      cwd: dir, timeout: COMPILE_TIMEOUT_MS,
+    })
     if (comp.exitCode !== 0) {
+      const msg = comp.timedOut
+        ? `Compiler timed out after ${COMPILE_TIMEOUT_MS / 1000}s. This usually means the server is under heavy load — try again in a moment.`
+        : (comp.stderr || 'Compilation failed with no output. Check the server logs.')
       return {
         success: false,
         output: '',
-        errors: fixErrors(comp.stderr || 'Compilation failed', p.offset, p.file),
+        errors: fixErrors(msg, p.offset, p.file),
         executionTime: Date.now() - t0,
       }
     }
 
-    // Step 2: Execute with java
+    // Step 2: Execute with java (student's program — kept short)
     const run = await exec('java', ['-cp', dir, p.cls], {
       cwd: dir,
-      timeout: TIMEOUT_MS,
+      timeout: RUN_TIMEOUT_MS,
       stdin,
     })
 
