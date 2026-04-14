@@ -11,7 +11,7 @@ import { clearKeyboardBindings } from './interaction/KeyboardController'
 import { parseJava } from './parser/JavaParser'
 import { executeTraceActions } from './parser/ActionExecutor'
 import { parseTrace } from './parser/TraceParser'
-import { diagnose, humanizeCompileError } from './parser/Diagnostics'
+import { diagnose, humanizeCompileBlock } from './parser/Diagnostics'
 import { compileCode } from './api/compiler'
 import { Sounds } from './assets/sounds'
 import ClassroomEntry from './ui/classroom/ClassroomEntry'
@@ -23,6 +23,7 @@ import InstructorPage from './ui/classroom/InstructorPage'
 import HomePage from './units/HomePage'
 import UnitPage from './units/UnitPage'
 import { getUnitDef } from './units/index'
+import ResizeHandle from './ui/ResizeHandle'
 
 function chapterXP(index: number): number {
   if (index < 5) return 100
@@ -134,12 +135,17 @@ function GameApp() {
 
     if (!r.success) {
       addLog('❌ Code did not run — compilation failed:', '#ff8c5a')
-      const errorLines = r.errors.split('\n').filter(Boolean).slice(0, 6)
-      errorLines.forEach((line) => {
-        addLog(`   ${line}`, '#ff8c5a')
-        const tip = humanizeCompileError(line)
-        if (tip) addLog(`   💡 ${tip}`, '#ffc857')
-      })
+      const blocks = humanizeCompileBlock(r.errors)
+      if (blocks.length === 0) {
+        // No recognizable diagnostic block — show raw
+        r.errors.split('\n').filter(Boolean).slice(0, 6).forEach((ln) => addLog(`   ${ln}`, '#ff8c5a'))
+      } else {
+        blocks.slice(0, 4).forEach((b) => {
+          const prefix = b.line != null ? `Line ${b.line}: ` : ''
+          addLog(`   ${prefix}${b.friendly}`, '#ffc857')
+        })
+        if (blocks.length > 4) addLog(`   … ${blocks.length - 4} more error${blocks.length - 4 === 1 ? '' : 's'} hidden`, '#6d809c')
+      }
       Sounds.error()
       return
     }
@@ -406,6 +412,11 @@ function GameApp() {
               ))}
             </div>
           </div>
+          <ResizeHandle
+            axis="y" initial={100} min={60} max={500}
+            storageKey="jq:consoleHeight" direction="below"
+            onResize={(px) => document.documentElement.style.setProperty('--console-height', px + 'px')}
+          />
           <div className="console-wrap">
             <div className="console-label">Console Output</div>
             <div className="console-box" ref={logRef}>
@@ -420,6 +431,12 @@ function GameApp() {
             </div>
           </div>
         </div>
+
+        <ResizeHandle
+          axis="x" initial={520} min={360} max={900}
+          storageKey="jq:editorWidth" direction="right"
+          onResize={(px) => document.documentElement.style.setProperty('--editor-width', px + 'px')}
+        />
 
         <div className="editor-col">
           <div className="editor-head">

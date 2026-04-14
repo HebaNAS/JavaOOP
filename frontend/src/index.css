@@ -83,7 +83,8 @@ body { font-family: 'Exo 2', sans-serif; color: #d0dce8; }
   font-weight: 600;
 }
 .console-box {
-  height: 100px; overflow-y: auto; padding: 10px 14px; background: #0a0f1a;
+  height: var(--console-height, 100px);
+  overflow-y: auto; padding: 10px 14px; background: #0a0f1a;
   border-radius: 8px; border: 1px solid #152030; font-size: 14px;
   font-family: 'JetBrains Mono', monospace; line-height: 1.7;
 }
@@ -92,9 +93,47 @@ body { font-family: 'Exo 2', sans-serif; color: #d0dce8; }
 
 /* ─── EDITOR PANEL ─── */
 .editor-col {
-  width: 520px; min-width: 440px; max-width: 620px; display: flex;
-  flex-direction: column; border-left: 1px solid #1a2744; background: #0c1018; flex-shrink: 0;
+  width: var(--editor-width, 520px);
+  min-width: 360px; max-width: 900px; display: flex;
+  flex-direction: column; background: #0c1018; flex-shrink: 0;
   overflow: hidden;
+}
+
+/* ─── RESIZE HANDLES ─── */
+.resize-handle-v {
+  /* vertical divider between arena and editor — drag horizontally */
+  width: 6px; cursor: col-resize; flex-shrink: 0;
+  background: #1a2744; border-left: 1px solid #0a0f1a; border-right: 1px solid #0a0f1a;
+  transition: background 0.15s;
+  position: relative;
+}
+.resize-handle-v:hover,
+.resize-handle-v.dragging { background: #ff6b35; }
+.resize-handle-v::after {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  width: 2px; height: 28px; background: rgba(255,255,255,0.18);
+  transform: translate(-50%, -50%); border-radius: 2px;
+}
+
+.resize-handle-h {
+  /* horizontal divider above console — drag vertically */
+  height: 6px; cursor: row-resize; margin: 0 14px;
+  background: #1a2744; border-radius: 3px;
+  transition: background 0.15s;
+  position: relative;
+}
+.resize-handle-h:hover,
+.resize-handle-h.dragging { background: #ff6b35; }
+.resize-handle-h::after {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  width: 28px; height: 2px; background: rgba(255,255,255,0.18);
+  transform: translate(-50%, -50%); border-radius: 2px;
+}
+
+/* Disable text selection across the page during a drag */
+body.resizing, body.resizing * {
+  user-select: none !important;
+  cursor: inherit !important;
 }
 .editor-head {
   display: flex; align-items: center; justify-content: space-between;
