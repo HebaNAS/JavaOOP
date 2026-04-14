@@ -143,41 +143,11 @@ export function diagnose(input: DiagInput): Tip[] {
 
   if (!compileSuccess) return tips // compile errors are handled separately
 
-  // If student wrote objects but never summoned any, explain.
+  // Student created objects but never called any method on them → nothing
+  // happens in the arena because the backend only animates on method entry.
   const newExpr = /new\s+([A-Z]\w*)\s*\(/g
   const instantiatedTypes = new Set<string>()
   for (const m of code.matchAll(newExpr)) instantiatedTypes.add(m[1])
-  const hasSummon = has(code, /\bArena\s*\.\s*summon\s*\(/)
-
-  if (instantiatedTypes.size > 0 && !hasSummon && (counts.spawn ?? 0) === 0) {
-    tips.push({
-      severity: 'hint',
-      color: TIP_COLORS.hint,
-      text: `💡 You created ${[...instantiatedTypes].join(', ')} object${instantiatedTypes.size > 1 ? 's' : ''} but didn't put them on the arena. Add \`Arena.summon(yourObject);\` after \`new\` to see them appear.`,
-    })
-  }
-
-  // Student called foo.attack(bar) but never Arena.attack — common
-  // mid-progression pattern: they wrote the method, it mutated state, but
-  // the 3D arena never got told.
-  const sourceHasMethodCall = (name: string) => new RegExp(`\\w+\\s*\\.\\s*${name}\\s*\\(`).test(code)
-  const sourceCallsArena = (name: string) => new RegExp(`Arena\\s*\\.\\s*${name}\\s*\\(`).test(code)
-
-  const combatMap: Array<[string, string, string]> = [
-    ['attack',   'attack',  '⚔️'],
-    ['castSpell','cast',    '🔮'],
-    ['shoot',    'shoot',   '🏹'],
-    ['heal',     'heal',    '✨'],
-    ['defend',   'defend',  '🛡️'],
-  ]
-  for (const [method, traceType, icon] of combatMap) {
-    if (sourceHasMethodCall(method) && !sourceCallsArena(traceType) && (counts[traceType] ?? 0) === 0) {
-      tips.push({
-        severity: 'hint', color: TIP_COLORS.hint,
-        text: `${icon} You call .${method}(...) on an object, but nothing happens in the arena. Your method changes data but the 3D world doesn't know. Try calling \`Arena.${traceType}(${method === 'defend' ? 'who' : 'who, target'});\` inside your method (or after it) so the animation plays.`,
-      })
-    }
-  }
 
   // Method defined but never invoked
   for (const cls of parsed.classes) {
@@ -194,41 +164,38 @@ export function diagnose(input: DiagInput): Tip[] {
     }
   }
 
-  // Attack method exists but doesn't modify target health (trivial body)
+  // Attack method exists but doesn't seem to change any target's health.
+  // Accepts any variable name (target, enemy, foo) and any decrement form:
+  //   target.health = target.health - ...
+  //   target.health -= ...
+  //   enemy.health--
   const atkMethod = parsed.classes.flatMap((c) => c.methods).find((m) => m.name === 'attack')
   if (atkMethod) {
-    const touchesHealth = has(code, /target\s*\.\s*(health|hp)/) || has(code, /Arena\s*\.\s*attack\s*\(/)
-    if (!touchesHealth) {
+    const decrementsHealth =
+      /\b\w+\s*\.\s*(?:health|hp)\s*(?:-=|=\s*[\w.]+\s*\.\s*(?:health|hp)\s*-|--)/.test(code)
+    if (!decrementsHealth) {
       tips.push({
         severity: 'hint', color: TIP_COLORS.hint,
-        text: "💡 Your attack() doesn't seem to reduce the target's health. Try: `target.health = target.health - this.attackPower;` or `Arena.attack(this, target);`",
+        text: "💡 Your attack() doesn't seem to reduce the target's health. The classic pattern is `target.health -= this.attackPower;` (shorthand for subtract-and-assign).",
       })
     }
   }
 
-  // Compiled & ran but emitted nothing at all
+  // Compiled & ran but emitted nothing — student defined classes but
+  // didn't create or use any objects.
   const totalTraceEvents = Object.values(counts).reduce((a, b) => a + b, 0)
   if (totalTraceEvents === 0) {
-    tips.push({
-      severity: 'hint', color: TIP_COLORS.hint,
-      text: "💡 Your code ran but nothing happened on the arena. Call `Arena.summon(yourHero)` to place a character, then `Arena.attack(hero, enemy)` to fight!",
-    })
-  }
-
-  // stdout exists but no trace — student is printing, not using Arena
-  if (stdoutNonTrace.trim().length > 0 && totalTraceEvents === 0) {
-    tips.push({
-      severity: 'info', color: TIP_COLORS.info,
-      text: "ℹ️ Your code printed to stdout but didn't drive any game action. `System.out.println` shows text; use `Arena.*` to make things happen in 3D.",
-    })
-  }
-
-  // Attack on unknown target
-  if (trace.warnings.some((w) => w.includes('attack called with null'))) {
-    tips.push({
-      severity: 'warn', color: TIP_COLORS.warn,
-      text: "⚠️ You called Arena.attack(...) with a null object. Make sure both fighters were created with `new` before attacking.",
-    })
+    if (instantiatedTypes.size === 0) {
+      tips.push({
+        severity: 'hint', color: TIP_COLORS.hint,
+        text: "💡 You defined classes but never created any objects. Use `new` to make one: `Warrior hero = new Warrior(\"Aldric\", 100, 25);`",
+      })
+    } else if (parsed.calls.filter((c) => c.obj !== '__sysout__').length === 0) {
+      tips.push({
+        severity: 'hint', color: TIP_COLORS.hint,
+        text: "💡 Your object was created but you haven't called any methods on it yet. Try `hero.attack(enemy);` to see something happen.",
+      })
+    }
   }
 
   return tips

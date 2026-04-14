@@ -1,4 +1,8 @@
 import java.lang.reflect.Field;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Arena — the bridge between your Java code and the 3D game world.
@@ -84,6 +88,25 @@ public class Arena {
     return "Warrior";
   }
 
+  // ──────────── Idempotency / dedup ────────────
+  //
+  // The backend auto-injects Arena.* calls at the end of every student
+  // method. When a subclass method calls super.method(), the super's
+  // injected Arena call fires first, then the override's injection
+  // fires — we'd get the same animation twice. This dedup layer swallows
+  // exact-match emissions that come back-to-back within a short window.
+
+  private static final Set<Integer> SUMMONED = new HashSet<>();
+  private static final Map<String, Long> LAST_EMIT = new HashMap<>();
+  private static final long DEDUP_WINDOW_NS = 50_000_000L; // 50 ms
+
+  private static boolean shouldSuppress(String key) {
+    long now = System.nanoTime();
+    Long last = LAST_EMIT.get(key);
+    LAST_EMIT.put(key, now);
+    return last != null && (now - last) < DEDUP_WINDOW_NS;
+  }
+
   // ──────────── Trace emission ────────────
 
   private static void emit(String... parts) {
@@ -94,9 +117,11 @@ public class Arena {
 
   // ──────────── Public API ────────────
 
-  /** Spawn a character on the arena. Reads name/health/attackPower from the object. */
+  /** Spawn a character on the arena. Reads name/health/attackPower from the object.
+   *  Idempotent per object — calling repeatedly for the same instance is a no-op. */
   public static void summon(Object obj) {
     if (obj == null) { emit("warn", "summon called with null"); return; }
+    if (!SUMMONED.add(System.identityHashCode(obj))) return;
     String name = readName(obj);
     String kind = cls(obj);
     int hp = readInt(obj, "health", "hp", "hitPoints");
@@ -115,47 +140,48 @@ public class Arena {
   /** Move a character to a tile. */
   public static void move(Object who, int col, int row) {
     if (who == null) return;
-    emit("move", readName(who), String.valueOf(col), String.valueOf(row));
+    String name = readName(who);
+    if (shouldSuppress("move:" + name + ":" + col + ":" + row)) return;
+    emit("move", name, String.valueOf(col), String.valueOf(row));
   }
 
-  /** Attack: play animation and subtract attacker.attackPower from target.health. */
+  /** Attack: play animation. Injection runs AFTER the student's body so
+   *  target.health has already been updated; we emit the damage delta. */
   public static void attack(Object attacker, Object target) {
     if (attacker == null || target == null) { emit("warn", "attack called with null"); return; }
+    String a = readName(attacker), t = readName(target);
+    if (shouldSuppress("attack:" + a + ":" + t)) return;
     int dmg = readInt(attacker, "attackPower", "attack", "atk", "damage", "power");
     if (dmg < 0) dmg = 10;
-    int hp = readInt(target, "health", "hp");
-    if (hp >= 0) writeInt(target, Math.max(0, hp - dmg), "health", "hp");
-    emit("attack", readName(attacker), readName(target), String.valueOf(dmg), cls(attacker));
+    emit("attack", a, t, String.valueOf(dmg), cls(attacker));
   }
 
   /** Cast a spell on a target (mage-style). */
   public static void cast(Object caster, Object target) {
     if (caster == null || target == null) return;
+    String c = readName(caster), t = readName(target);
+    if (shouldSuppress("cast:" + c + ":" + t)) return;
     int dmg = readInt(caster, "attackPower", "attack", "atk");
     if (dmg < 0) dmg = 20;
-    int hp = readInt(target, "health", "hp");
-    if (hp >= 0) writeInt(target, Math.max(0, hp - dmg), "health", "hp");
-    emit("spell", readName(caster), readName(target), String.valueOf(dmg));
+    emit("spell", c, t, String.valueOf(dmg));
   }
 
   /** Shoot an arrow at a target (archer-style). */
   public static void shoot(Object archer, Object target) {
     if (archer == null || target == null) return;
+    String a = readName(archer), t = readName(target);
+    if (shouldSuppress("shoot:" + a + ":" + t)) return;
     int dmg = readInt(archer, "attackPower", "attack", "atk");
     if (dmg < 0) dmg = 15;
-    int hp = readInt(target, "health", "hp");
-    if (hp >= 0) writeInt(target, Math.max(0, hp - dmg), "health", "hp");
-    emit("shoot", readName(archer), readName(target), String.valueOf(dmg));
+    emit("shoot", a, t, String.valueOf(dmg));
   }
 
   /** Heal a target by `amount`. */
   public static void heal(Object healer, Object target, int amount) {
     if (target == null) return;
-    int hp = readInt(target, "health", "hp");
-    int max = readInt(target, "maxHealth", "maxHp");
-    if (max < 0) max = hp + amount; // no cap known
-    if (hp >= 0) writeInt(target, Math.min(max, hp + amount), "health", "hp");
-    emit("heal", readName(healer == null ? target : healer), readName(target), String.valueOf(amount));
+    String h = readName(healer == null ? target : healer), t = readName(target);
+    if (shouldSuppress("heal:" + h + ":" + t + ":" + amount)) return;
+    emit("heal", h, t, String.valueOf(amount));
   }
 
   /** Heal self. */
@@ -164,7 +190,9 @@ public class Arena {
   /** Raise a shield (halves incoming damage for a few seconds). */
   public static void defend(Object who) {
     if (who == null) return;
-    emit("defend", readName(who));
+    String n = readName(who);
+    if (shouldSuppress("defend:" + n)) return;
+    emit("defend", n);
   }
 
   /** Show a message in the console panel (not a game action). */

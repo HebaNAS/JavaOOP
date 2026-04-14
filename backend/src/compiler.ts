@@ -142,6 +142,137 @@ function isClassStart(line: string): boolean {
   return /^(public\s+)?(abstract\s+)?(class|interface|enum)\s+\w+/.test(line.trim())
 }
 
+// ── Automatic instrumentation ──────────────────────
+//
+// Students write pure OOP (no mention of Arena). The backend silently
+// injects Arena.<action>(this, ...) calls at the end of methods whose
+// names match a known registry, and Arena.summon(this) at the end of
+// every constructor body. This lets the game animate from real student
+// code without requiring the student to learn a helper API.
+//
+// Design notes:
+// - Injection is at the LAST closing brace of the method/ctor body,
+//   so the student's logic runs first (including any super calls), then
+//   the animation fires once.
+// - Arena methods are idempotent within a short time window, so a
+//   super.attack() chain that causes two injections only emits once.
+// - This is regex-based and intentionally only matches beginner-level
+//   Java shapes. Pathological code (single-line multi-method, macro-like
+//   preprocessing) is out of scope.
+
+interface ParamInfo { type: string; name: string }
+
+function parseParams(s: string): ParamInfo[] {
+  const clean = s.trim()
+  if (!clean) return []
+  return clean.split(',').map((p) => {
+    const parts = p.trim().split(/\s+/)
+    return { type: parts.slice(0, -1).join(' '), name: parts[parts.length - 1] }
+  }).filter((p) => p.name)
+}
+
+function methodInjection(name: string, params: ParamInfo[]): string | null {
+  const p0 = params[0]?.name
+  const p1 = params[1]?.name
+  switch (name) {
+    case 'attack':    return p0 ? `Arena.attack(this, ${p0});` : null
+    case 'defend':    return 'Arena.defend(this);'
+    case 'shoot':     return p0 ? `Arena.shoot(this, ${p0});` : null
+    case 'castSpell': return p0 ? `Arena.cast(this, ${p0});` : null
+    case 'specialAbility':
+    case 'specialMove':
+                      return p0 ? `Arena.cast(this, ${p0});` : 'Arena.defend(this);'
+    case 'heal':
+      // heal() / heal(amount) / heal(target) / heal(target, amount)
+      if (params.length === 0) return 'Arena.heal(this, 10);'
+      if (params.length === 1) {
+        // Heuristic: int-ish name → amount; object-ish → target
+        return /^(amount|amt|hp|n|points|value)$/i.test(p0!) || params[0].type === 'int'
+          ? `Arena.heal(this, ${p0});`
+          : `Arena.heal(this, ${p0}, 20);`
+      }
+      return `Arena.heal(this, ${p0}, ${p1});`
+    case 'moveUp': case 'moveDown': case 'moveLeft': case 'moveRight':
+    case 'move':
+      return 'Arena.move(this, this.x, this.y);'
+  }
+  return null
+}
+
+/** Walk a class body, inject Arena.* calls at method/ctor end. */
+function instrumentClassBody(block: string): string {
+  const firstBraceIdx = block.indexOf('{')
+  if (firstBraceIdx < 0) return block
+  const header = block.slice(0, firstBraceIdx + 1)
+  const body = block.slice(firstBraceIdx + 1)
+
+  const classNameMatch = header.match(/(?:class|interface|enum)\s+(\w+)/)
+  if (!classNameMatch) return block
+  const className = classNameMatch[1]
+
+  // Don't instrument interfaces (no bodies) or abstract methods
+  if (/\binterface\s+\w+/.test(header)) return block
+
+  const lines = body.split('\n')
+  const out: string[] = []
+  let depth = 1 // opening brace already consumed into `header`
+
+  // State when tracking a method body for injection
+  let pending: { injection: string; targetDepth: number } | null = null
+
+  const methodSig =
+    /^\s*(?:@\w+\s+)?(?:public\s+|private\s+|protected\s+)?(?:static\s+)?(?:final\s+)?(?:abstract\s+)?(\w[\w<>\[\],\s]*?\s+)(\w+)\s*\(([^)]*)\)/
+  const ctorSig = new RegExp(
+    `^\\s*(?:public\\s+|private\\s+|protected\\s+)?${className}\\s*\\(([^)]*)\\)`,
+  )
+
+  for (const line of lines) {
+    let outLine = line
+
+    // Count braces before deciding if a closing brace ends a tracked method
+    const opens = (line.match(/\{/g) || []).length
+    const closes = (line.match(/\}/g) || []).length
+    const depthAfter = depth + opens - closes
+
+    // Is this a NEW method/ctor start at class-body depth 1?
+    // It must contain {  (or the next line will — but beginners usually put { on same line)
+    if (!pending && depth === 1) {
+      const ctor = line.match(ctorSig)
+      const meth = line.match(methodSig)
+      if (ctor) {
+        pending = { injection: 'Arena.summon(this);', targetDepth: depth }
+      } else if (meth) {
+        const name = meth[2]
+        // Skip abstract method declarations (no body)
+        const isAbstract = /\babstract\b/.test(meth[0]) || (!line.includes('{') && line.trim().endsWith(';'))
+        if (!isAbstract) {
+          const params = parseParams(meth[3])
+          const inj = methodInjection(name, params)
+          if (inj) pending = { injection: inj, targetDepth: depth }
+        }
+      }
+    }
+
+    // If a pending method's closing brace is on this line AND depthAfter
+    // is <= its starting depth, inject before the last } on this line.
+    if (pending && closes > 0 && depthAfter <= pending.targetDepth) {
+      const lastClose = outLine.lastIndexOf('}')
+      if (lastClose >= 0) {
+        outLine =
+          outLine.slice(0, lastClose) +
+          `\n        ${pending.injection}\n    ` +
+          outLine.slice(lastClose)
+      }
+      pending = null
+    }
+
+    out.push(outLine)
+    depth = depthAfter
+  }
+
+  return header + out.join('\n')
+}
+
 /**
  * Analyse student code and prepare a compilable Java file.
  *
@@ -159,10 +290,14 @@ function prepare(code: string): Prepared {
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .trim()
 
-  // Case 1: already a full program
+  // Case 1: already a full program — instrument classes inside it too
   if (/public\s+class\s+\w+/.test(clean) && /public\s+static\s+void\s+main/.test(clean)) {
     const cls = clean.match(/public\s+class\s+(\w+)/)![1]
-    return { java: code, file: cls + '.java', cls, offset: 0 }
+    const instrumented = code.replace(
+      /((?:public\s+|abstract\s+)?(?:class|interface|enum)\s+\w+[^{]*\{[\s\S]*?^\})/gm,
+      (block) => instrumentClassBody(block),
+    )
+    return { java: instrumented, file: cls + '.java', cls, offset: 0 }
   }
 
   // Parse into segments
@@ -204,6 +339,8 @@ function prepare(code: string): Prepared {
       if (/^\s*public\s+(abstract\s+)?(class|interface|enum)/.test(block)) {
         block = block.replace(/^(\s*)public\s+/, '$1')
       }
+      // Auto-inject Arena trace calls so students never see the helper
+      block = instrumentClassBody(block)
       classes.push(block)
       i = b.end
       continue
