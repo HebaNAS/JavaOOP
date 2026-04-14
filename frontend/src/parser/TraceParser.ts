@@ -2,7 +2,7 @@
 // into a GameAction[] stream the ActionExecutor can render.
 //
 // Protocol (tab-separated):
-//   ##JQ\tspawn\t<name>\t<class>\t<hp>\t<atk>\t<mana>\t<def>\t<arrows>
+//   ##JQ\tspawn\t<name>\t<class>\t<hp>\t<atk>\t<mana>\t<def>\t<arrows>\t<col>\t<row>
 //   ##JQ\tmove\t<name>\t<col>\t<row>
 //   ##JQ\tattack\t<attacker>\t<target>\t<dmg>\t<attackerClass>
 //   ##JQ\tspell\t<caster>\t<target>\t<dmg>
@@ -78,17 +78,25 @@ export function parseTrace(stdout: string): TraceResult {
 
     switch (type) {
       case 'spawn': {
-        const [name, cls, hpS, atkS, manaS, defS, arrowsS] = rest
+        const [name, cls, hpS, atkS, manaS, defS, arrowsS, colS, rowS] = rest
         const hp = parseInt(hpS) || 100
         const atk = parseInt(atkS) || 15
-        // Alternate left/right spawn points so two parties face off
-        const sp = spawnIdx % 2 === 0
-          ? SPAWNS_LEFT[Math.floor(spawnIdx / 2) % SPAWNS_LEFT.length]
-          : SPAWNS_RIGHT[Math.floor(spawnIdx / 2) % SPAWNS_RIGHT.length]
+        // Spawn cell: if server supplied one (new protocol), use it.
+        // Otherwise fall back to the old roster-based allocation.
+        let col: number, row: number
+        if (colS != null && rowS != null && !isNaN(parseInt(colS))) {
+          col = parseInt(colS)
+          row = parseInt(rowS)
+        } else {
+          const sp = spawnIdx % 2 === 0
+            ? SPAWNS_LEFT[Math.floor(spawnIdx / 2) % SPAWNS_LEFT.length]
+            : SPAWNS_RIGHT[Math.floor(spawnIdx / 2) % SPAWNS_RIGHT.length]
+          col = sp.c; row = sp.r
+        }
         spawnIdx++
         const data: SpawnData = {
           className: cls || 'Warrior',
-          col: sp.c, row: sp.r,
+          col, row,
           hp, maxHp: hp, atk,
           mana: parseInt(manaS) || 0,
           def: parseInt(defS) || 0,

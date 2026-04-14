@@ -88,6 +88,24 @@ public class Arena {
     return "Warrior";
   }
 
+  // ──────────── Spawn-cell allocation ────────────
+  //
+  // Students write `this.y -= 1` in moveUp() and expect the character to
+  // move "up one tile". If x/y start at 0 (Java default) that would send
+  // them to grid (-1) — off the map. So on summon we pick a sensible
+  // cell from the spawn roster and write it BACK into the student's
+  // object via reflection. Their arithmetic then operates on real grid
+  // coordinates without them ever thinking about the mapping.
+
+  // Must stay in sync with frontend's TraceParser SPAWNS_LEFT / SPAWNS_RIGHT.
+  private static final int[][] SPAWNS = {
+    {3, 3}, {8, 4},  // col, row — alternating left/right
+    {3, 5}, {8, 6},
+    {2, 4}, {9, 3},
+    {4, 2}, {7, 7},
+  };
+  private static int spawnIdx = 0;
+
   // ──────────── Idempotency / dedup ────────────
   //
   // The backend auto-injects Arena.* calls at the end of every student
@@ -118,6 +136,8 @@ public class Arena {
   // ──────────── Public API ────────────
 
   /** Spawn a character on the arena. Reads name/health/attackPower from the object.
+   *  Also picks a spawn cell and writes it into the object's x/y fields so
+   *  student movement code starts from a valid position.
    *  Idempotent per object — calling repeatedly for the same instance is a no-op. */
   public static void summon(Object obj) {
     if (obj == null) { emit("warn", "summon called with null"); return; }
@@ -131,10 +151,19 @@ public class Arena {
     int arrows = readInt(obj, "arrowCount", "arrows");
     if (hp < 0) hp = 100;
     if (atk < 0) atk = 15;
+
+    // Allocate a spawn cell and write it into the object if x/y exist.
+    int[] cell = SPAWNS[spawnIdx % SPAWNS.length];
+    spawnIdx++;
+    int col = cell[0], row = cell[1];
+    writeInt(obj, col, "x", "col");
+    writeInt(obj, row, "y", "row");
+
     emit("spawn", name, kind,
       String.valueOf(hp), String.valueOf(atk),
       String.valueOf(Math.max(0, mana)), String.valueOf(Math.max(0, def)),
-      String.valueOf(Math.max(0, arrows)));
+      String.valueOf(Math.max(0, arrows)),
+      String.valueOf(col), String.valueOf(row));
   }
 
   /** Move a character to a tile. */
