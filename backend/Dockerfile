@@ -3,8 +3,7 @@
 #
 # IMPORTANT: build this from the REPO ROOT so npm workspaces resolve:
 #   docker build -f backend/Dockerfile -t javaoopquest-api .
-# The `fly.toml` in backend/ sets build.dockerfile + build.build-target
-# so `fly deploy` does the right thing from inside backend/.
+# See backend/DEPLOY.md for Render / Cloud Run / Oracle Cloud steps.
 FROM eclipse-temurin:21-jdk-jammy
 
 # ── Install Node.js 20 ──────────────────────────────────────
