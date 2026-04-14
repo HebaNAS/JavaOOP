@@ -104,11 +104,16 @@ function GameApp() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const runCode = useCallback(async () => {
-    // Static parse for chapter validation (structural checks: classes, methods, etc.)
+    // Clear the result bar immediately — it only gets repopulated AFTER
+    // the backend confirms the code compiled. This prevents the "next
+    // chapter" / "submit" button from flashing on for code that is
+    // structurally right but doesn't compile (e.g. has a typo).
+    setValMsg('')
+    setValPass(false)
+
+    // Static parse — used purely for the console structural summary and
+    // for chapter.validate(), both deferred until after a clean compile.
     const parsed = parseJava(code)
-    const val = chapter.validate(parsed)
-    setValMsg(val.msg)
-    setValPass(val.pass)
 
     clearKeyboardBindings()
     clearScene()
@@ -172,7 +177,13 @@ function GameApp() {
     })
     tips.slice(0, 4).forEach((t) => addLog(t.text, t.color))
 
-    // Chapter validation feedback + XP (only after we know the code compiles)
+    // Chapter validation runs ONLY now — after compile succeeded. This
+    // guarantees the result bar below the editor (submit / next chapter
+    // buttons) only reflects the outcome the server confirmed.
+    const val = chapter.validate(parsed)
+    setValMsg(val.msg)
+    setValPass(val.pass)
+
     if (val.pass) {
       const prevXP = xp
       completeChapter(currentChapter, code)
