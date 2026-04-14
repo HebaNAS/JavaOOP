@@ -1,8 +1,19 @@
 import { execFile } from 'node:child_process'
-import { writeFile, mkdir, rm } from 'node:fs/promises'
+import { writeFile, mkdir, rm, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import crypto from 'node:crypto'
+
+// Helper Java sources shipped alongside this module. Loaded once.
+const HELPERS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'helpers')
+let ARENA_SRC: string | null = null
+async function loadArena(): Promise<string> {
+  if (ARENA_SRC === null) {
+    ARENA_SRC = await readFile(join(HELPERS_DIR, 'Arena.java'), 'utf8')
+  }
+  return ARENA_SRC
+}
 
 // ── Types ──────────────────────────────────────────
 
@@ -251,9 +262,11 @@ export async function compileAndRun(code: string, stdin?: string): Promise<Compi
   try {
     const p = prepare(code)
     await writeFile(join(dir, p.file), p.java)
+    // Always make the Arena helper available to student code.
+    await writeFile(join(dir, 'Arena.java'), await loadArena())
 
-    // Step 1: Compile with javac
-    const comp = await exec('javac', [p.file], { cwd: dir })
+    // Step 1: Compile with javac (student file + Arena helper)
+    const comp = await exec('javac', [p.file, 'Arena.java'], { cwd: dir })
     if (comp.exitCode !== 0) {
       return {
         success: false,

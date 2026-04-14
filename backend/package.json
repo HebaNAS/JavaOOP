@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc && mkdir -p dist/helpers && cp src/helpers/*.java dist/helpers/",
     "start": "node dist/server.js"
   },
   "dependencies": {

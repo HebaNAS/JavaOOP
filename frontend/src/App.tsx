@@ -9,7 +9,9 @@ import { useClassroomStore } from './state/classroomStore'
 import { CHAPTERS } from './chapters/chapters'
 import { clearKeyboardBindings } from './interaction/KeyboardController'
 import { parseJava } from './parser/JavaParser'
-import { buildActions, executeActions } from './parser/ActionExecutor'
+import { executeTraceActions } from './parser/ActionExecutor'
+import { parseTrace } from './parser/TraceParser'
+import { diagnose, humanizeCompileError } from './parser/Diagnostics'
 import { compileCode } from './api/compiler'
 import { Sounds } from './assets/sounds'
 import ClassroomEntry from './ui/classroom/ClassroomEntry'
@@ -100,12 +102,70 @@ function GameApp() {
     setCode(draft || saved || CHAPTERS[currentChapter].starter)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const runCode = useCallback(() => {
+  const runCode = useCallback(async () => {
+    // Static parse for chapter validation (structural checks: classes, methods, etc.)
     const parsed = parseJava(code)
     const val = chapter.validate(parsed)
     setValMsg(val.msg)
     setValPass(val.pass)
 
+    clearKeyboardBindings()
+    clearScene()
+
+    // Structural summary (always useful — independent of what runs)
+    parsed.classes.forEach((c) => {
+      const extra = c.isAbstract ? ' (abstract)' : ''
+      addLog(`📋 Class "${c.name}"${extra} — ${c.attrs.length} attrs, ${c.methods.length} methods`, '#42A5F5')
+      if (c.parent) addLog(`   └─ extends ${c.parent}`, '#AB47BC')
+    })
+    parsed.interfaces.forEach((i) => {
+      addLog(`📄 Interface "${i.name}" — ${i.methods.length} methods`, '#FF9800')
+    })
+
+    // Compile + run on the backend — the only source of truth for execution.
+    addLog('☕ Compiling Java...', '#6d809c')
+    let r
+    try {
+      r = await compileCode(code)
+    } catch {
+      addLog('☕ Compiler unreachable — is the backend running?', '#ff8c5a')
+      return
+    }
+
+    if (!r.success) {
+      addLog('❌ Code did not run — compilation failed:', '#ff8c5a')
+      const errorLines = r.errors.split('\n').filter(Boolean).slice(0, 6)
+      errorLines.forEach((line) => {
+        addLog(`   ${line}`, '#ff8c5a')
+        const tip = humanizeCompileError(line)
+        if (tip) addLog(`   💡 ${tip}`, '#ffc857')
+      })
+      Sounds.error()
+      return
+    }
+
+    // Compile ok — derive actions from the REAL stdout trace.
+    const trace = parseTrace(r.output)
+
+    if (trace.cleanStdout.trim()) {
+      trace.cleanStdout.split('\n').forEach((ln) => {
+        if (ln.trim()) addLog('   ' + ln, '#a0b0c8')
+      })
+    }
+
+    executeTraceActions(trace.actions, addLog, trace.charMap)
+
+    addLog(`☕ Ran in ${r.executionTime}ms · ${trace.actions.length} arena event${trace.actions.length === 1 ? '' : 's'}`, '#5cd98e')
+
+    // Friendly diagnostics — explain why things may not have moved
+    const tips = diagnose({
+      code, parsed, trace,
+      compileSuccess: true,
+      stdoutNonTrace: trace.cleanStdout,
+    })
+    tips.slice(0, 4).forEach((t) => addLog(t.text, t.color))
+
+    // Chapter validation feedback + XP (only after we know the code compiles)
     if (val.pass) {
       const prevXP = xp
       completeChapter(currentChapter, code)
@@ -126,39 +186,8 @@ function GameApp() {
       }
       addLog(`✅ ${val.msg}`, '#4CAF50')
     } else {
-      Sounds.error()
       addLog(`⚠️ ${val.msg}`, '#FF9800')
     }
-
-    clearKeyboardBindings()
-    clearScene()
-
-    parsed.classes.forEach((c) => {
-      const extra = c.isAbstract ? ' (abstract)' : ''
-      addLog(`📋 Class "${c.name}"${extra} — ${c.attrs.length} attrs, ${c.methods.length} methods`, '#42A5F5')
-      if (c.parent) addLog(`   └─ extends ${c.parent}`, '#AB47BC')
-    })
-    parsed.interfaces.forEach((i) => {
-      addLog(`📄 Interface "${i.name}" — ${i.methods.length} methods`, '#FF9800')
-    })
-
-    const { actions, charMap } = buildActions(parsed)
-    executeActions(actions, addLog, charMap)
-
-    // ── Real Java compilation (parallel) ──
-    compileCode(code).then((r) => {
-      if (r.success) {
-        addLog('☕ Java compiler: code compiles successfully!', '#5cd98e')
-        if (r.output.trim()) addLog(`   stdout: ${r.output.trim()}`, '#a0b0c8')
-      } else {
-        addLog('☕ Java compiler found issues:', '#ff8c5a')
-        r.errors.split('\n').filter(Boolean).slice(0, 4).forEach((line) => {
-          addLog(`   ${line}`, '#ff8c5a')
-        })
-      }
-    }).catch(() => {
-      addLog('☕ Compiler unavailable (backend not running)', '#6d809c')
-    })
   }, [code, chapter, currentChapter, xp, addLog, clearScene, completeChapter, triggerConfetti])
 
   const handleGoTo = useCallback((i: number) => {
