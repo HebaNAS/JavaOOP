@@ -1,0 +1,30 @@
+# Fly.io config for the JavaOOPQuest backend.
+# Usage (one-time):
+#   cd backend
+#   fly launch --copy-config --no-deploy    # creates app, sets region
+#   fly deploy
+#
+# After deploy, note the hostname (e.g. javaoopquest-api.fly.dev) and set
+# VITE_API_BASE=https://javaoopquest-api.fly.dev in Netlify env vars.
+
+app = "javaoopquest-api"   # change if this name is taken
+primary_region = "lhr"      # London; pick closest: iad, sjc, fra, syd...
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3001"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = "stop"    # scale to zero when idle
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

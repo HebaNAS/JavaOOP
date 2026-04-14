@@ -5,9 +5,14 @@ export interface CompileResult {
   executionTime: number
 }
 
+// In dev, Vite proxies /api/* to the backend (see vite.config.ts).
+// In production (Netlify), set VITE_API_BASE to the public URL of your
+// backend (e.g. https://your-backend.fly.dev) at build time.
+const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
+
 export async function compileCode(code: string, stdin?: string): Promise<CompileResult> {
   try {
-    const res = await fetch('/api/compile', {
+    const res = await fetch(`${API_BASE}/api/compile`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code, stdin }),
