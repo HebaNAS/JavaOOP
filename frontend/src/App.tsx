@@ -164,7 +164,31 @@ function GameApp() {
       })
     }
 
-    executeTraceActions(trace.actions, addLog, trace.charMap)
+    // Build per-character methods list by joining the trace's spawned
+    // characters (by class name) with the parsed class methods (including
+    // inherited ones up the extends chain). This is what the keyboard
+    // controller needs to bind WASD/space/Q/E/R to the right actions.
+    const methodsForClass = (className: string): string[] => {
+      const acc: string[] = []
+      const chain: string[] = []
+      let cur: string | undefined = className
+      while (cur) {
+        chain.push(cur)
+        const c = parsed.classes.find((x) => x.name === cur)
+        cur = c?.parent
+      }
+      chain.reverse().forEach((n) => {
+        const c = parsed.classes.find((x) => x.name === n)
+        c?.methods.forEach((m) => { if (!acc.includes(m.name)) acc.push(m.name) })
+      })
+      return acc
+    }
+    const charMethods: Record<string, string[]> = {}
+    Object.entries(trace.charMap).forEach(([name, data]) => {
+      charMethods[name] = methodsForClass(data.className)
+    })
+
+    executeTraceActions(trace.actions, addLog, trace.charMap, charMethods)
 
     addLog(`☕ Ran in ${r.executionTime}ms · ${trace.actions.length} arena event${trace.actions.length === 1 ? '' : 's'}`, '#5cd98e')
 

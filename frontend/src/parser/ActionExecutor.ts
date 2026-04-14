@@ -434,6 +434,9 @@ export function executeTraceActions(
   actions: TraceAction[],
   addLog: (text: string, color?: string) => void,
   charMap: Record<string, SpawnData>,
+  /** Per-character method list (from the parsed source) for keyboard binding.
+   *  Map keys are character names matching charMap. */
+  charMethods: Record<string, string[]> = {},
 ) {
   const store = useGameStore.getState
 
@@ -582,11 +585,27 @@ export function executeTraceActions(
     }, action.delay || 0)
   })
 
-  // After spawns land, wire keyboard for player-controlled characters
+  // After spawns land, wire up keyboard + enemy AI.
   const hasSpawns = Object.keys(charMap).length > 0
   if (hasSpawns) {
     const maxDelay = actions.reduce((m, a) => Math.max(m, a.delay || 0), 0)
     setTimeout(() => {
+      // Build the list of {charId, methods} for the keyboard controller.
+      const list = Object.keys(charMap).map((id) => ({
+        charId: id,
+        methods: charMethods[id] ?? [],
+      })).filter((e) => e.methods.length > 0)
+
+      if (list.length > 0) {
+        setupKeyboardBindings(list)
+        const moveMethods = ['moveUp', 'moveDown', 'moveLeft', 'moveRight']
+        const combatMethods = ['attack', 'defend', 'castSpell', 'shoot', 'heal']
+        const boundMove = list.some(({ methods }) => methods.some((m) => moveMethods.includes(m)))
+        const boundCombat = list.some(({ methods }) => methods.some((m) => combatMethods.includes(m)))
+        if (boundMove) addLog('🎮 WASD/Arrow keys bound to movement methods!', '#FFC107')
+        if (boundCombat) addLog('🎮 SPACE=attack · Q=defend · E=spell/shoot · R=heal', '#FFC107')
+      }
+
       const chars = useGameStore.getState().characters
       const hasEnemies = chars.some((c) => c.isEnemy && c.hp > 0)
       const hasPlayers = chars.some((c) => !c.isEnemy && c.hp > 0)
