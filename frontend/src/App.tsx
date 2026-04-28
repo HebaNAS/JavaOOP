@@ -92,6 +92,12 @@ function GameApp() {
   // text the student already moved on from.
   const lastRunCodeRef = useRef<string | null>(null)
   const [isStale, setIsStale] = useState(false)
+  // Holds the unsubscribe fn for the previous Run's session listener so we
+  // can clean it up before the next Run subscribes a new one. Without this,
+  // each Run leaves a zombie listener that ALSO calls startEnemyAI() on
+  // the next `ready` event — multiple enemy AI timers stack up and the
+  // hero gets attacked several times per tick.
+  const sessionListenerCleanupRef = useRef<(() => void) | null>(null)
 
   // Auto-save draft as student types (debounced)
   const draftTimer = useRef<number>(0)
@@ -134,6 +140,8 @@ function GameApp() {
     clearKeyboardBindings()
     clearScene()
     session.end()                        // tear down any prior JVM session
+    sessionListenerCleanupRef.current?.()  // remove previous Run's listener
+    sessionListenerCleanupRef.current = null
     lastRunCodeRef.current = code        // remember what we're about to compile
     setIsStale(false)
 
@@ -290,11 +298,15 @@ function GameApp() {
       }
     })
 
+    // Stash for the next runCode / chapter switch / unmount to clean up.
+    sessionListenerCleanupRef.current = unsubscribe
+
     try {
       await session.start(code)
     } catch (e) {
       addLog('☕ Session server unreachable — is the backend running?', '#ff8c5a')
       unsubscribe?.()
+      sessionListenerCleanupRef.current = null
     }
   }, [code, chapter, currentChapter, xp, addLog, clearScene, completeChapter, triggerConfetti])
 
@@ -313,6 +325,8 @@ function GameApp() {
     clearKeyboardBindings()
     clearScene()
     session.end()
+    sessionListenerCleanupRef.current?.()
+    sessionListenerCleanupRef.current = null
     lastRunCodeRef.current = null
     setIsStale(false)
     addLog(`── Chapter ${i + 1}: ${CHAPTERS[i].concept} ──`, '#ff6b35')
@@ -337,6 +351,8 @@ function GameApp() {
     return () => {
       clearKeyboardBindings()
       session.end()
+      sessionListenerCleanupRef.current?.()
+      sessionListenerCleanupRef.current = null
     }
   }, [])
 

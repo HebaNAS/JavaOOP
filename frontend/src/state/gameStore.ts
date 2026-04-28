@@ -143,6 +143,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
 export function startEnemyAI() {
   const store = useGameStore.getState
 
+  // Defensive: clear any timers still alive from a previous Run. clearScene
+  // already handles this, but if startEnemyAI ever gets called twice in a
+  // row (e.g. a stale session listener fires `ready` again) without an
+  // intervening clearScene, we MUST not stack tickers — multiple tickers
+  // would mean the enemy attacks the hero N times every 3 seconds.
+  const existing = useGameStore.getState().enemyTimers
+  if (existing.length > 0) {
+    existing.forEach((t) => clearInterval(t))
+    useGameStore.setState({ enemyTimers: [] })
+  }
+
   const timer = window.setInterval(() => {
     const { characters } = store()
     const enemies = characters.filter((c) => c.isEnemy && c.hp > 0)
