@@ -125,14 +125,29 @@ public class Arena {
   // object via reflection. Their arithmetic then operates on real grid
   // coordinates without them ever thinking about the mapping.
 
+  // Player spawns are on the LEFT half of the grid (col < 7); enemy spawns
+  // are on the RIGHT (col >= 7). Frontend uses col >= 7 to set isEnemy.
   // Must stay in sync with frontend's TraceParser SPAWNS_LEFT / SPAWNS_RIGHT.
-  private static final int[][] SPAWNS = {
-    {3, 3}, {8, 4},
-    {3, 5}, {8, 6},
-    {2, 4}, {9, 3},
-    {4, 2}, {7, 7},
-  };
-  private static int spawnIdx = 0;
+  private static final int[][] SPAWNS_LEFT  = { {3,3}, {3,5}, {2,4}, {4,2} };
+  private static final int[][] SPAWNS_RIGHT = { {8,4}, {8,6}, {9,3}, {7,7} };
+  private static int playerSpawnIdx = 0;
+  private static int enemySpawnIdx  = 0;
+
+  /** Heuristic: does this character's name suggest an enemy? Names like
+   *  "Grok", "boss", "Dreadlord" land on the right side; everyone else on
+   *  the left. Students don't need to think about sides — naming a foe
+   *  with an enemy-like word is the convention the chapter copy uses. */
+  private static boolean looksLikeEnemy(String name) {
+    if (name == null) return false;
+    String n = name.toLowerCase();
+    String[] markers = {
+      "enemy", "foe", "boss", "grok", "dread", "evil", "dark", "shadow",
+      "villain", "orc", "goblin", "demon", "skeleton", "monster", "beast",
+      "ogre", "troll", "dragon", "necro", "wraith", "fiend",
+    };
+    for (String m : markers) if (n.contains(m)) return true;
+    return false;
+  }
 
   // ──────────── Idempotency / dedup ────────────
   //
@@ -169,9 +184,26 @@ public class Arena {
 
   /** Spawn a character. Reads name/health/attackPower from the object, picks
    *  a spawn cell, writes col/row back into x/y, and registers the object
-   *  for later REPL lookup. Idempotent per instance. */
+   *  for later REPL lookup. Idempotent per instance.
+   *
+   *  IMPORTANT: when a subclass constructor calls super(), the parent's
+   *  auto-injected summon would fire BEFORE the subclass has assigned its
+   *  own fields (e.g. Mage.mana). We detect that case via the call stack
+   *  and skip — the subclass's own injected summon (which fires last) is
+   *  the one that emits the spawn trace. */
   public static void summon(Object obj) {
     if (obj == null) { emit("warn", "summon called with null"); return; }
+
+    // Skip super-constructor invocations so subclass fields aren't lost.
+    StackTraceElement[] trace = Thread.currentThread().getStackTrace();
+    if (trace.length >= 3) {
+      StackTraceElement caller = trace[2];
+      if ("<init>".equals(caller.getMethodName())
+          && !caller.getClassName().equals(obj.getClass().getName())) {
+        return;   // super() chain; wait for the actual class's constructor
+      }
+    }
+
     if (!SUMMONED.add(System.identityHashCode(obj))) return;
     String name = readName(obj);
     String kind = cls(obj);
@@ -183,8 +215,15 @@ public class Arena {
     if (hp < 0) hp = 100;
     if (atk < 0) atk = 15;
 
-    int[] cell = SPAWNS[spawnIdx % SPAWNS.length];
-    spawnIdx++;
+    boolean enemy = looksLikeEnemy(name);
+    int[] cell;
+    if (enemy) {
+      cell = SPAWNS_RIGHT[enemySpawnIdx % SPAWNS_RIGHT.length];
+      enemySpawnIdx++;
+    } else {
+      cell = SPAWNS_LEFT[playerSpawnIdx % SPAWNS_LEFT.length];
+      playerSpawnIdx++;
+    }
     int col = cell[0], row = cell[1];
     writeInt(obj, col, "x", "col");
     writeInt(obj, row, "y", "row");
