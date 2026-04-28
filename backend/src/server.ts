@@ -369,9 +369,13 @@ app.post('/api/compile', async (req, res) => {
 const httpServer = createServer(app)
 attachSessionServer(httpServer)
 
-httpServer.listen(PORT, () => {
-  console.log(`Backend running on http://localhost:${PORT}`)
-  console.log(`  Session WebSocket: ws://localhost:${PORT}/api/session`)
+// Bind explicitly to 0.0.0.0 so Render/Cloud Run port scanners (IPv4) can
+// detect the open port. Node's default is the IPv6 unspecified address,
+// which their probes don't always reach.
+const portNum = Number(PORT)
+httpServer.listen(portNum, '0.0.0.0', () => {
+  console.log(`Backend running on http://0.0.0.0:${portNum}`)
+  console.log(`  Session WebSocket: ws://0.0.0.0:${portNum}/api/session`)
   checkJava().then(({ ok, version }) => {
     if (ok) {
       console.log(`  Java compiler: ${version}`)
