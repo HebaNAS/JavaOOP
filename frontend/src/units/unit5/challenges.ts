@@ -210,6 +210,7 @@ export const UNIT_5: UnitDef = {
       validate: {
         type: 'bugfix',
         expected: 'Max: 91',
+        bugDescription: 'The comparison uses arr[0] (the first element) instead of max — so max never updates correctly.',
       },
       xp: 75,
     },

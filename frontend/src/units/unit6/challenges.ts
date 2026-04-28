@@ -267,6 +267,7 @@ export const UNIT_6: UnitDef = {
       validate: {
         type: 'bugfix',
         expected: 'Area: 35',
+        bugDescription: 'area() adds width and height instead of multiplying them.',
       },
       xp: 75,
     },

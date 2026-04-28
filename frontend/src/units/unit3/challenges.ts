@@ -274,6 +274,7 @@ export const UNIT_3: UnitDef = {
       validate: {
         type: 'bugfix',
         expected: '1\n2\n3\n4\n5',
+        bugDescription: 'The loop runs too far — it prints 1 to 10 instead of 1 to 5.',
       },
       xp: 75,
     },

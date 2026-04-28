@@ -258,6 +258,7 @@ export const UNIT_10: UnitDef = {
       validate: {
         type: 'bugfix',
         expected: 'Equal: true',
+        bugDescription: '== compares object references for Strings, not their contents — use .equals() instead.',
       },
       xp: 75,
     },
