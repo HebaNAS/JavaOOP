@@ -140,9 +140,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   clearScene: () => {
-    // Clear enemy timers
+    // Clear enemy timers AND BOTH selection slots — leaving selectedId
+    // pointing to a now-vanished character meant the next chapter's first
+    // click immediately set a target instead of picking a hero.
     get().enemyTimers.forEach((t) => clearInterval(t))
-    set({ characters: [], effects: [], enemyTimers: [], showConfetti: false, targetId: null })
+    set({
+      characters: [], effects: [], enemyTimers: [],
+      showConfetti: false,
+      selectedId: null, targetId: null,
+    })
   },
 }))
 

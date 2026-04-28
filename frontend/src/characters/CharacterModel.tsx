@@ -166,9 +166,15 @@ export default function CharacterModel({ ch }: { ch: CharacterState }) {
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation()
     if (ch.hp <= 0) return
-    if (selectedId == null) {
-      // Nothing selected → first click picks the hero you control.
+    // Treat a selectedId pointing to a vanished character (e.g. left over
+    // from a previous chapter / Run) as if nothing's selected — otherwise
+    // the first click would skip the "select" branch and go straight to
+    // setting a target.
+    const characters = useGameStore.getState().characters
+    const selectionAlive = selectedId != null && characters.some((c) => c.id === selectedId && c.hp > 0)
+    if (!selectionAlive) {
       selectCharacter(ch.id)
+      setTarget(null)
       addLog(`🎯 Selected ${ch.name}. Click another character to set a target.`, '#FFC107')
       return
     }
