@@ -172,7 +172,11 @@ public class Arena {
 
   private static final Set<Integer> SUMMONED = new HashSet<>();
   private static final Map<String, Long> LAST_EMIT = new HashMap<>();
-  private static final long DEDUP_WINDOW_NS = 50_000_000L; // 50 ms
+  // Tight 3ms window — only catches super.method() chains where parent and
+  // override fire essentially simultaneously. Wider windows would suppress
+  // back-to-back keypress invocations and make the body's actual effect
+  // (e.g. randomised damage in chapter 7) look cumulative.
+  private static final long DEDUP_WINDOW_NS = 3_000_000L;
 
   private static boolean shouldSuppress(String key) {
     long now = System.nanoTime();
