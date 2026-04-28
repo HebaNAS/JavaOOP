@@ -3,16 +3,16 @@ import GameScene from './scene/GameScene'
 import CodeEditor from './ui/CodeEditor'
 import XPBar from './ui/XPBar'
 import SyntaxReference from './ui/SyntaxReference'
-import { useGameStore } from './state/gameStore'
+import { useGameStore, startEnemyAI } from './state/gameStore'
 import { useChapterStore, getLevel } from './state/chapterStore'
 import { useClassroomStore } from './state/classroomStore'
 import { CHAPTERS } from './chapters/chapters'
-import { clearKeyboardBindings } from './interaction/KeyboardController'
+import { clearKeyboardBindings, setupKeyboardBindings } from './interaction/KeyboardController'
 import { parseJava } from './parser/JavaParser'
-import { executeTraceActions } from './parser/ActionExecutor'
-import { parseTrace } from './parser/TraceParser'
+import { executeTraceActionStream } from './parser/ActionExecutor'
+import { eventToAction } from './parser/TraceParser'
 import { diagnose, humanizeCompileBlock } from './parser/Diagnostics'
-import { compileCode } from './api/compiler'
+import { session } from './api/session'
 import { Sounds } from './assets/sounds'
 import ClassroomEntry from './ui/classroom/ClassroomEntry'
 import TeamSelect from './ui/classroom/TeamSelect'
@@ -86,6 +86,13 @@ function GameApp() {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [logs])
 
+  // Track the source the JVM session was started from, so we can detect
+  // when the editor has drifted ("stale code") and end the session — that
+  // way keypresses can't accidentally invoke methods compiled from older
+  // text the student already moved on from.
+  const lastRunCodeRef = useRef<string | null>(null)
+  const [isStale, setIsStale] = useState(false)
+
   // Auto-save draft as student types (debounced)
   const draftTimer = useRef<number>(0)
   const handleCodeChange = useCallback((newCode: string) => {
@@ -94,7 +101,22 @@ function GameApp() {
     draftTimer.current = window.setTimeout(() => {
       saveDraft(currentChapter, newCode)
     }, 1000)
-  }, [currentChapter, saveDraft])
+
+    // If a session is alive and the new code differs from what was Run,
+    // end it. The student will need to click Run again to apply edits.
+    if (lastRunCodeRef.current != null && newCode !== lastRunCodeRef.current) {
+      if (!isStale) {
+        setIsStale(true)
+        if (session.isAlive()) {
+          session.end()
+          addLog('⏸️ Code changed — JVM session ended. Click ▶ Run to apply.', '#FFC107')
+        }
+      }
+    } else if (isStale && newCode === lastRunCodeRef.current) {
+      // Reverted to the run state.
+      setIsStale(false)
+    }
+  }, [currentChapter, saveDraft, isStale, addLog])
 
   // Load draft or solution on mount
   useEffect(() => {
@@ -104,19 +126,16 @@ function GameApp() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const runCode = useCallback(async () => {
-    // Clear the result bar immediately — it only gets repopulated AFTER
-    // the backend confirms the code compiled. This prevents the "next
-    // chapter" / "submit" button from flashing on for code that is
-    // structurally right but doesn't compile (e.g. has a typo).
     setValMsg('')
     setValPass(false)
 
-    // Static parse — used purely for the console structural summary and
-    // for chapter.validate(), both deferred until after a clean compile.
     const parsed = parseJava(code)
 
     clearKeyboardBindings()
     clearScene()
+    session.end()                        // tear down any prior JVM session
+    lastRunCodeRef.current = code        // remember what we're about to compile
+    setIsStale(false)
 
     // Structural summary (always useful — independent of what runs)
     parsed.classes.forEach((c) => {
@@ -128,46 +147,11 @@ function GameApp() {
       addLog(`📄 Interface "${i.name}" — ${i.methods.length} methods`, '#FF9800')
     })
 
-    // Compile + run on the backend — the only source of truth for execution.
-    addLog('☕ Compiling Java...', '#6d809c')
-    let r
-    try {
-      r = await compileCode(code)
-    } catch {
-      addLog('☕ Compiler unreachable — is the backend running?', '#ff8c5a')
-      return
-    }
+    addLog('☕ Compiling Java + spawning JVM session...', '#6d809c')
+    const sessionStartedAt = Date.now()
 
-    if (!r.success) {
-      addLog('❌ Code did not run — compilation failed:', '#ff8c5a')
-      const blocks = humanizeCompileBlock(r.errors)
-      if (blocks.length === 0) {
-        // No recognizable diagnostic block — show raw
-        r.errors.split('\n').filter(Boolean).slice(0, 6).forEach((ln) => addLog(`   ${ln}`, '#ff8c5a'))
-      } else {
-        blocks.slice(0, 4).forEach((b) => {
-          const prefix = b.line != null ? `Line ${b.line}: ` : ''
-          addLog(`   ${prefix}${b.friendly}`, '#ffc857')
-        })
-        if (blocks.length > 4) addLog(`   … ${blocks.length - 4} more error${blocks.length - 4 === 1 ? '' : 's'} hidden`, '#6d809c')
-      }
-      Sounds.error()
-      return
-    }
-
-    // Compile ok — derive actions from the REAL stdout trace.
-    const trace = parseTrace(r.output)
-
-    if (trace.cleanStdout.trim()) {
-      trace.cleanStdout.split('\n').forEach((ln) => {
-        if (ln.trim()) addLog('   ' + ln, '#a0b0c8')
-      })
-    }
-
-    // Build per-character methods list by joining the trace's spawned
-    // characters (by class name) with the parsed class methods (including
-    // inherited ones up the extends chain). This is what the keyboard
-    // controller needs to bind WASD/space/Q/E/R to the right actions.
+    // Build the per-character method list once, applied when the JVM signals
+    // ready (after main() finished spawning everyone).
     const methodsForClass = (className: string): string[] => {
       const acc: string[] = []
       const chain: string[] = []
@@ -175,7 +159,7 @@ function GameApp() {
       while (cur) {
         chain.push(cur)
         const c = parsed.classes.find((x) => x.name === cur)
-        cur = c?.parent
+        cur = c?.parent ?? undefined
       }
       chain.reverse().forEach((n) => {
         const c = parsed.classes.find((x) => x.name === n)
@@ -183,52 +167,134 @@ function GameApp() {
       })
       return acc
     }
+
+    const charMap: Record<string, any> = {}
     const charMethods: Record<string, string[]> = {}
-    Object.entries(trace.charMap).forEach(([name, data]) => {
-      charMethods[name] = methodsForClass(data.className)
-    })
+    const spawnIdx = { current: 0 }
+    let compileFailed = false
+    let unsubscribe: (() => void) | null = null
 
-    executeTraceActions(trace.actions, addLog, trace.charMap, charMethods)
+    const finishOnReady = () => {
+      const list = Object.keys(charMap).map((id) => ({
+        charId: id,
+        methods: charMethods[id] ?? [],
+      })).filter((e) => e.methods.length > 0)
 
-    addLog(`☕ Ran in ${r.executionTime}ms · ${trace.actions.length} arena event${trace.actions.length === 1 ? '' : 's'}`, '#5cd98e')
-
-    // Friendly diagnostics — explain why things may not have moved
-    const tips = diagnose({
-      code, parsed, trace,
-      compileSuccess: true,
-      stdoutNonTrace: trace.cleanStdout,
-      chapterIndex: currentChapter,
-    })
-    tips.slice(0, 4).forEach((t) => addLog(t.text, t.color))
-
-    // Chapter validation runs ONLY now — after compile succeeded. This
-    // guarantees the result bar below the editor (submit / next chapter
-    // buttons) only reflects the outcome the server confirmed.
-    const val = chapter.validate(parsed)
-    setValMsg(val.msg)
-    setValPass(val.pass)
-
-    if (val.pass) {
-      const prevXP = xp
-      completeChapter(currentChapter, code)
-      const newXP = useChapterStore.getState().xp
-      const earned = newXP - prevXP
-      if (earned > 0) {
-        addLog(`🌟 +${earned} XP earned!${useChapterStore.getState().hintsUsedThisChapter === 0 ? ' (No hints bonus!)' : ''}`, '#FFC107')
-        Sounds.victory()
-        triggerConfetti()
-        const oldLv = getLevel(prevXP)
-        const newLv = getLevel(newXP)
-        if (newLv.level > oldLv.level) {
-          setTimeout(() => {
-            Sounds.levelUp()
-            addLog(`🎖️ LEVEL UP! ${oldLv.title} → ${newLv.title} (Lv.${newLv.level})`, '#FFC107')
-          }, 600)
-        }
+      if (list.length > 0) {
+        setupKeyboardBindings(list)
+        const moveMethods = ['moveUp', 'moveDown', 'moveLeft', 'moveRight']
+        const combatMethods = ['attack', 'defend', 'castSpell', 'shoot', 'heal']
+        const boundMove = list.some(({ methods }) => methods.some((m) => moveMethods.includes(m)))
+        const boundCombat = list.some(({ methods }) => methods.some((m) => combatMethods.includes(m)))
+        if (boundMove) addLog('🎮 WASD/Arrow keys bound to movement methods!', '#FFC107')
+        if (boundCombat) addLog('🎮 SPACE=attack · Q=defend · E=spell/shoot · R=heal', '#FFC107')
       }
-      addLog(`✅ ${val.msg}`, '#4CAF50')
-    } else {
-      addLog(`⚠️ ${val.msg}`, '#FF9800')
+
+      const chars = useGameStore.getState().characters
+      const hasEnemies = chars.some((c) => c.isEnemy && c.hp > 0)
+      const hasPlayers = chars.some((c) => !c.isEnemy && c.hp > 0)
+      if (hasEnemies && hasPlayers) {
+        startEnemyAI()
+        addLog('👹 Enemy AI activated! Use Q (defend) to halve damage.', '#F44336')
+      }
+
+      addLog(`☕ Session ready · ${Date.now() - sessionStartedAt}ms`, '#5cd98e')
+
+      // Diagnostics + validation. The diagnose() input expects a TraceResult,
+      // but for tips that only inspect the parsed source / chapter index it
+      // doesn't matter that we don't have a fully-populated one.
+      const trace = {
+        actions: [], charMap,
+        cleanStdout: '', warnings: [], eventCounts: {},
+      } as any
+      const tips = diagnose({
+        code, parsed, trace,
+        compileSuccess: true,
+        stdoutNonTrace: '',
+        chapterIndex: currentChapter,
+      })
+      tips.slice(0, 4).forEach((t) => addLog(t.text, t.color))
+
+      const val = chapter.validate(parsed)
+      setValMsg(val.msg)
+      setValPass(val.pass)
+
+      if (val.pass) {
+        const prevXP = xp
+        completeChapter(currentChapter, code)
+        const newXP = useChapterStore.getState().xp
+        const earned = newXP - prevXP
+        if (earned > 0) {
+          addLog(`🌟 +${earned} XP earned!${useChapterStore.getState().hintsUsedThisChapter === 0 ? ' (No hints bonus!)' : ''}`, '#FFC107')
+          Sounds.victory()
+          triggerConfetti()
+          const oldLv = getLevel(prevXP)
+          const newLv = getLevel(newXP)
+          if (newLv.level > oldLv.level) {
+            setTimeout(() => {
+              Sounds.levelUp()
+              addLog(`🎖️ LEVEL UP! ${oldLv.title} → ${newLv.title} (Lv.${newLv.level})`, '#FFC107')
+            }, 600)
+          }
+        }
+        addLog(`✅ ${val.msg}`, '#4CAF50')
+      } else {
+        addLog(`⚠️ ${val.msg}`, '#FF9800')
+      }
+    }
+
+    unsubscribe = session.on((ev) => {
+      if (ev.type === 'compile-error') {
+        compileFailed = true
+        addLog('❌ Code did not run — compilation failed:', '#ff8c5a')
+        const blocks = humanizeCompileBlock(ev.errors)
+        if (blocks.length === 0) {
+          ev.errors.split('\n').filter(Boolean).slice(0, 6).forEach((ln) => addLog(`   ${ln}`, '#ff8c5a'))
+        } else {
+          blocks.slice(0, 4).forEach((b) => {
+            const prefix = b.line != null ? `Line ${b.line}: ` : ''
+            addLog(`   ${prefix}${b.friendly}`, '#ffc857')
+          })
+          if (blocks.length > 4) addLog(`   … ${blocks.length - 4} more error${blocks.length - 4 === 1 ? '' : 's'} hidden`, '#6d809c')
+        }
+        Sounds.error()
+        unsubscribe?.()
+        return
+      }
+
+      if (ev.type === 'stdout') { addLog('   ' + ev.text, '#a0b0c8'); return }
+      if (ev.type === 'stderr') { addLog('   ' + ev.text, '#ff8c5a'); return }
+      if (ev.type === 'error')  { addLog('   ' + ev.text, '#ff8c5a'); return }
+
+      if (ev.type === 'ended') {
+        if (!compileFailed) addLog(`☕ Session ended: ${ev.reason}`, '#6d809c')
+        unsubscribe?.()
+        return
+      }
+
+      if (ev.type === 'trace') {
+        const action = eventToAction(ev.event, ev.parts, spawnIdx, 0)
+        if (!action) return
+
+        if (action.type === 'spawn' && action.data) {
+          charMap[action.name] = action.data
+          charMethods[action.name] = methodsForClass(action.data.className)
+        }
+
+        if (action.type === 'ready') {
+          finishOnReady()
+          return
+        }
+
+        executeTraceActionStream(action, addLog)
+      }
+    })
+
+    try {
+      await session.start(code)
+    } catch (e) {
+      addLog('☕ Session server unreachable — is the backend running?', '#ff8c5a')
+      unsubscribe?.()
     }
   }, [code, chapter, currentChapter, xp, addLog, clearScene, completeChapter, triggerConfetti])
 
@@ -246,6 +312,9 @@ function GameApp() {
     setShowSolution(false)
     clearKeyboardBindings()
     clearScene()
+    session.end()
+    lastRunCodeRef.current = null
+    setIsStale(false)
     addLog(`── Chapter ${i + 1}: ${CHAPTERS[i].concept} ──`, '#ff6b35')
   }, [isUnlocked, goToChapter, resetHintsForChapter, clearScene, addLog])
 
@@ -253,6 +322,7 @@ function GameApp() {
     resetAllProgress()
     clearKeyboardBindings()
     clearScene()
+    session.end()
     setCode(CHAPTERS[0].starter)
     setValMsg('')
     setValPass(false)
@@ -261,6 +331,14 @@ function GameApp() {
     setShowSolution(false)
     addLog('🔄 All progress reset. Starting fresh!', '#FF9800')
   }
+
+  // Tear down the JVM session when GameApp unmounts (route change, tab close).
+  useEffect(() => {
+    return () => {
+      clearKeyboardBindings()
+      session.end()
+    }
+  }, [])
 
   const handleHint = () => {
     setHintTier((p) => {
@@ -495,7 +573,17 @@ function GameApp() {
               <button className="btn-hint" onClick={handleHint}>
                 💡 {hintTier >= 0 ? `${hintTier + 1}/3` : 'Hint'}
               </button>
-              <button className="btn-run" onClick={runCode}>▶ Run</button>
+              <button
+                className="btn-run"
+                onClick={runCode}
+                style={isStale ? {
+                  boxShadow: '0 0 0 2px #FFC107, 0 0 12px rgba(255,193,7,0.6)',
+                  background: 'linear-gradient(180deg, #c08518 0%, #8a5e10 100%)',
+                } : undefined}
+                title={isStale ? 'Code changed — click to apply your edits' : undefined}
+              >
+                {isStale ? '▶ Run (apply edits)' : '▶ Run'}
+              </button>
             </div>
           </div>
 

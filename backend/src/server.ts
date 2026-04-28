@@ -3,8 +3,10 @@ import cors from 'cors'
 import Database from 'better-sqlite3'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { createServer } from 'http'
 import crypto from 'crypto'
 import { compileAndRun, checkJava, prepareArena } from './compiler.js'
+import { attachSessionServer } from './sessionServer.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -362,8 +364,14 @@ app.post('/api/compile', async (req, res) => {
   }
 })
 
-app.listen(PORT, () => {
+// Wrap express in a raw http server so the WebSocket session manager can
+// share the same port via HTTP upgrade.
+const httpServer = createServer(app)
+attachSessionServer(httpServer)
+
+httpServer.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`)
+  console.log(`  Session WebSocket: ws://localhost:${PORT}/api/session`)
   checkJava().then(({ ok, version }) => {
     if (ok) {
       console.log(`  Java compiler: ${version}`)

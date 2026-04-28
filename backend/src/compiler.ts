@@ -171,35 +171,102 @@ function parseParams(s: string): ParamInfo[] {
   }).filter((p) => p.name)
 }
 
-function methodInjection(name: string, params: ParamInfo[]): string | null {
+interface Injection {
+  // Spliced right after the method's opening `{`. Empty when no snapshot is
+  // needed (constructors).
+  prefix: string
+  // Spliced before the method's closing `}`. Reads __jq_pre established by
+  // the prefix so Arena can compute the delta the body actually produced.
+  suffix: string
+  // Fallback used when the prefix can't be inserted (e.g. weird brace
+  // placement). Same call shape as the pre-snapshot/delta code.
+  legacy: string
+}
+
+function methodInjection(name: string, params: ParamInfo[]): Injection | null {
   const p0 = params[0]?.name
   const p1 = params[1]?.name
   switch (name) {
-    case 'attack':    return p0 ? `Arena.attack(this, ${p0});` : null
-    case 'defend':    return 'Arena.defend(this);'
-    case 'shoot':     return p0 ? `Arena.shoot(this, ${p0});` : null
-    case 'castSpell': return p0 ? `Arena.cast(this, ${p0});` : null
+    case 'attack':
+      if (!p0) return null
+      return {
+        prefix: `int __jq_pre = Arena.snapshotHealth(${p0});`,
+        suffix: `Arena.attack(this, ${p0}, __jq_pre);`,
+        legacy: `Arena.attack(this, ${p0});`,
+      }
+    case 'castSpell':
+      if (!p0) return null
+      return {
+        prefix: `int __jq_pre = Arena.snapshotHealth(${p0});`,
+        suffix: `Arena.cast(this, ${p0}, __jq_pre);`,
+        legacy: `Arena.cast(this, ${p0});`,
+      }
+    case 'shoot':
+      if (!p0) return null
+      return {
+        prefix: `int __jq_pre = Arena.snapshotHealth(${p0});`,
+        suffix: `Arena.shoot(this, ${p0}, __jq_pre);`,
+        legacy: `Arena.shoot(this, ${p0});`,
+      }
     case 'specialAbility':
     case 'specialMove':
-                      return p0 ? `Arena.cast(this, ${p0});` : 'Arena.defend(this);'
-    case 'heal':
-      // heal() / heal(amount) / heal(target) / heal(target, amount)
-      if (params.length === 0) return 'Arena.heal(this, 10);'
-      if (params.length === 1) {
-        // Heuristic: int-ish name → amount; object-ish → target
-        return /^(amount|amt|hp|n|points|value)$/i.test(p0!) || params[0].type === 'int'
-          ? `Arena.heal(this, ${p0});`
-          : `Arena.heal(this, ${p0}, 20);`
+      if (p0) return {
+        prefix: `int __jq_pre = Arena.snapshotHealth(${p0});`,
+        suffix: `Arena.cast(this, ${p0}, __jq_pre);`,
+        legacy: `Arena.cast(this, ${p0});`,
       }
-      return `Arena.heal(this, ${p0}, ${p1});`
+      return {
+        prefix: `boolean __jq_pre = Arena.snapshotShield(this);`,
+        suffix: `Arena.defend(this, __jq_pre);`,
+        legacy: `Arena.defend(this);`,
+      }
+    case 'defend':
+      return {
+        prefix: `boolean __jq_pre = Arena.snapshotShield(this);`,
+        suffix: `Arena.defend(this, __jq_pre);`,
+        legacy: `Arena.defend(this);`,
+      }
+    case 'heal': {
+      // heal() / heal(amount) / heal(target) / heal(target, amount)
+      if (params.length === 0) return {
+        prefix: `int __jq_pre = Arena.snapshotHealth(this);`,
+        suffix: `Arena.heal(this, this, __jq_pre);`,
+        legacy: `Arena.heal(this, 10);`,
+      }
+      if (params.length === 1) {
+        // Heuristic: int-ish name OR int type → amount-only self-heal.
+        // Otherwise the param is the target object.
+        const isSelfInt = params[0].type === 'int'
+          || /^(amount|amt|hp|n|points|value)$/i.test(p0!)
+        if (isSelfInt) return {
+          prefix: `int __jq_pre = Arena.snapshotHealth(this);`,
+          suffix: `Arena.heal(this, this, __jq_pre);`,
+          legacy: `Arena.heal(this, ${p0});`,
+        }
+        return {
+          prefix: `int __jq_pre = Arena.snapshotHealth(${p0});`,
+          suffix: `Arena.heal(this, ${p0}, __jq_pre);`,
+          legacy: `Arena.heal(this, ${p0}, 20);`,
+        }
+      }
+      return {
+        prefix: `int __jq_pre = Arena.snapshotHealth(${p0});`,
+        suffix: `Arena.heal(this, ${p0}, __jq_pre);`,
+        legacy: `Arena.heal(this, ${p0}, ${p1});`,
+      }
+    }
     case 'moveUp': case 'moveDown': case 'moveLeft': case 'moveRight':
     case 'move':
-      return 'Arena.move(this, this.x, this.y);'
+      return {
+        prefix: `int __jqx = this.x; int __jqy = this.y;`,
+        suffix: `Arena.move(this, this.x, this.y, __jqx, __jqy);`,
+        legacy: `Arena.move(this, this.x, this.y);`,
+      }
   }
   return null
 }
 
-/** Walk a class body, inject Arena.* calls at method/ctor end. */
+/** Walk a class body, inject Arena.* prefix/suffix calls around method/ctor bodies. */
 function instrumentClassBody(block: string): string {
   const firstBraceIdx = block.indexOf('{')
   if (firstBraceIdx < 0) return block
@@ -217,8 +284,18 @@ function instrumentClassBody(block: string): string {
   const out: string[] = []
   let depth = 1 // opening brace already consumed into `header`
 
-  // State when tracking a method body for injection
-  let pending: { injection: string; targetDepth: number } | null = null
+  // Pending method/ctor body. `prefix` is spliced after the opening `{`,
+  // `suffix` before the closing `}`. If the prefix can't be inserted (e.g.
+  // the `{` is on a later line we never see — pathological), we fall back
+  // to `legacy` which has the older, snapshot-less call signature.
+  let pending: {
+    prefix: string
+    suffix: string
+    legacy: string
+    targetDepth: number
+    prefixInjected: boolean
+    onSigLine: boolean   // first iteration after the signature is matched
+  } | null = null
 
   const methodSig =
     /^\s*(?:@\w+\s+)?(?:public\s+|private\s+|protected\s+)?(?:static\s+)?(?:final\s+)?(?:abstract\s+)?(\w[\w<>\[\],\s]*?\s+)(\w+)\s*\(([^)]*)\)/
@@ -229,39 +306,78 @@ function instrumentClassBody(block: string): string {
   for (const line of lines) {
     let outLine = line
 
-    // Count braces before deciding if a closing brace ends a tracked method
+    // Count braces from the ORIGINAL line — depth tracking must be stable
+    // even after we splice prefix/suffix code (which never adds braces).
     const opens = (line.match(/\{/g) || []).length
     const closes = (line.match(/\}/g) || []).length
     const depthAfter = depth + opens - closes
 
-    // Is this a NEW method/ctor start at class-body depth 1?
-    // It must contain {  (or the next line will — but beginners usually put { on same line)
+    // Detect a NEW method/ctor start at class-body depth.
     if (!pending && depth === 1) {
       const ctor = line.match(ctorSig)
-      const meth = line.match(methodSig)
+      const meth = !ctor && line.match(methodSig)
       if (ctor) {
-        pending = { injection: 'Arena.summon(this);', targetDepth: depth }
+        // Constructors don't need a snapshot — `Arena.summon(this)` reads
+        // current field values directly. Mark prefix as already injected.
+        pending = {
+          prefix: '',
+          suffix: 'Arena.summon(this);',
+          legacy: 'Arena.summon(this);',
+          targetDepth: depth,
+          prefixInjected: true,
+          onSigLine: true,
+        }
       } else if (meth) {
         const name = meth[2]
-        // Skip abstract method declarations (no body)
-        const isAbstract = /\babstract\b/.test(meth[0]) || (!line.includes('{') && line.trim().endsWith(';'))
+        const isAbstract = /\babstract\b/.test(meth[0])
+          || (!line.includes('{') && line.trim().endsWith(';'))
         if (!isAbstract) {
           const params = parseParams(meth[3])
           const inj = methodInjection(name, params)
-          if (inj) pending = { injection: inj, targetDepth: depth }
+          if (inj) {
+            pending = {
+              prefix: inj.prefix,
+              suffix: inj.suffix,
+              legacy: inj.legacy,
+              targetDepth: depth,
+              prefixInjected: !inj.prefix,   // empty prefix → nothing to inject
+              onSigLine: true,
+            }
+          }
         }
       }
     }
 
-    // If a pending method's closing brace is on this line AND depthAfter
-    // is <= its starting depth, inject before the last } on this line.
+    // Splice prefix right after the method's opening `{`. On the signature
+    // line that `{` lives after the parameter list's `)`; on later lines
+    // (defensive students who put `{` on its own line) it's the first `{`.
+    if (pending && !pending.prefixInjected && opens > 0) {
+      let braceIdx: number
+      if (pending.onSigLine) {
+        const parenIdx = outLine.indexOf(')')
+        braceIdx = outLine.indexOf('{', parenIdx >= 0 ? parenIdx : 0)
+      } else {
+        braceIdx = outLine.indexOf('{')
+      }
+      if (braceIdx >= 0) {
+        outLine =
+          outLine.slice(0, braceIdx + 1)
+          + `\n        ${pending.prefix}`
+          + outLine.slice(braceIdx + 1)
+        pending.prefixInjected = true
+      }
+    }
+    if (pending) pending.onSigLine = false
+
+    // Splice suffix before the closing `}` that ends the method body.
     if (pending && closes > 0 && depthAfter <= pending.targetDepth) {
       const lastClose = outLine.lastIndexOf('}')
       if (lastClose >= 0) {
+        const inj = pending.prefixInjected ? pending.suffix : pending.legacy
         outLine =
-          outLine.slice(0, lastClose) +
-          `\n        ${pending.injection}\n    ` +
-          outLine.slice(lastClose)
+          outLine.slice(0, lastClose)
+          + `\n        ${inj}\n    `
+          + outLine.slice(lastClose)
       }
       pending = null
     }
@@ -283,8 +399,13 @@ function instrumentClassBody(block: string): string {
  *  3. Pure statements (Units 2-5) → everything in Main.main().
  *  4. Methods + statements (Unit 6) → methods become static in Main,
  *     statements in main().
+ *
+ * `interactive` appends Arena.repl() at the end of main(), which blocks
+ * reading stdin so the JVM stays alive for keypress dispatch. One-shot
+ * compile (POST /api/compile) leaves it off so the process exits.
  */
-function prepare(code: string): Prepared {
+function prepare(code: string, opts: { interactive?: boolean } = {}): Prepared {
+  const interactive = !!opts.interactive
   const clean = code
     .replace(/\/\/.*$/gm, '')
     .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -293,10 +414,11 @@ function prepare(code: string): Prepared {
   // Case 1: already a full program — instrument classes inside it too
   if (/public\s+class\s+\w+/.test(clean) && /public\s+static\s+void\s+main/.test(clean)) {
     const cls = clean.match(/public\s+class\s+(\w+)/)![1]
-    const instrumented = code.replace(
+    let instrumented = code.replace(
       /((?:public\s+|abstract\s+)?(?:class|interface|enum)\s+\w+[^{]*\{[\s\S]*?^\})/gm,
       (block) => instrumentClassBody(block),
     )
+    if (interactive) instrumented = injectReplIntoMain(instrumented)
     return { java: instrumented, file: cls + '.java', cls, offset: 0 }
   }
 
@@ -402,10 +524,34 @@ function prepare(code: string): Prepared {
 
   for (const s of stmts) out.push('        ' + s)
 
+  if (interactive) out.push('        Arena.repl();')
+
   out.push('    }')
   out.push('}')
 
   return { java: out.join('\n'), file: 'Main.java', cls: 'Main', offset }
+}
+
+/** Inject Arena.repl() before the closing `}` of main() in a full program.
+ *  Walks the source counting braces; injects when main()'s body brace returns
+ *  to depth 0 relative to its opening. */
+function injectReplIntoMain(source: string): string {
+  const re = /public\s+static\s+void\s+main\s*\([^)]*\)\s*\{/
+  const m = re.exec(source)
+  if (!m) return source
+  const start = m.index + m[0].length
+  let depth = 1
+  for (let i = start; i < source.length; i++) {
+    const ch = source[i]
+    if (ch === '{') depth++
+    else if (ch === '}') {
+      depth--
+      if (depth === 0) {
+        return source.slice(0, i) + '\n        Arena.repl();\n    ' + source.slice(i)
+      }
+    }
+  }
+  return source
 }
 
 // ── Error message cleanup ──────────────────────────
@@ -420,6 +566,45 @@ function fixErrors(raw: string, offset: number, fileName: string): string {
 }
 
 // ── Public API ─────────────────────────────────────
+
+/**
+ * Compile student code for an interactive REPL session. Writes the prepared
+ * source + Arena.class into a temp dir, runs javac, and returns either the
+ * directory + entry-class for the session manager to spawn, or compile errors.
+ */
+export interface SessionCompileResult {
+  success: boolean
+  errors: string
+  /** Absolute temp dir containing Main.class + Arena.class. Only present on success. */
+  dir?: string
+  /** Class name to launch with `java -cp <dir> <cls>`. */
+  cls?: string
+  /** Wrapper offset for translating javac line numbers back to student lines. */
+  offset?: number
+  fileName?: string
+}
+
+export async function compileForSession(code: string): Promise<SessionCompileResult> {
+  const dir = join(tmpdir(), 'jq-sess-' + crypto.randomUUID())
+  await mkdir(dir, { recursive: true })
+
+  const p = prepare(code, { interactive: true })
+  await writeFile(join(dir, p.file), p.java)
+  const arenaCls = await prepareArena()
+  await copyFile(arenaCls, join(dir, 'Arena.class'))
+
+  const comp = await exec('javac', ['-cp', dir, p.file], {
+    cwd: dir, timeout: COMPILE_TIMEOUT_MS,
+  })
+  if (comp.exitCode !== 0) {
+    rm(dir, { recursive: true, force: true }).catch(() => {})
+    const msg = comp.timedOut
+      ? `Compiler timed out after ${COMPILE_TIMEOUT_MS / 1000}s.`
+      : (comp.stderr || 'Compilation failed with no output.')
+    return { success: false, errors: fixErrors(msg, p.offset, p.file) }
+  }
+  return { success: true, errors: '', dir, cls: p.cls, offset: p.offset, fileName: p.file }
+}
 
 export async function compileAndRun(code: string, stdin?: string): Promise<CompileResult> {
   const dir = join(tmpdir(), 'jq-' + crypto.randomUUID())

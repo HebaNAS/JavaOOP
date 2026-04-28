@@ -1,8 +1,15 @@
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Arena — the bridge between your Java code and the 3D game world.
@@ -11,11 +18,8 @@ import java.util.Set;
  *   1. Affects the game world (spawn, move, damage, heal)
  *   2. Prints a ##JQ trace line so the browser can animate it
  *
- * You never need to read or understand this class. Just CALL it:
- *
- *   Warrior hero = new Warrior("Aldric", 100, 25);
- *   Arena.summon(hero);              // makes hero appear on screen
- *   Arena.attack(hero, enemy);       // swings sword, deals damage, plays animation
+ * You never need to read or understand this class. The backend auto-injects
+ * calls into your methods so writing pure OOP is enough.
  */
 public class Arena {
 
@@ -27,7 +31,6 @@ public class Arena {
     if (s != null) return s;
     s = readString(o, "characterName");
     if (s != null) return s;
-    // Fallback: identity hash
     return o.getClass().getSimpleName() + "@" + System.identityHashCode(o);
   }
 
@@ -76,9 +79,7 @@ public class Arena {
 
   private static String cls(Object o) {
     String c = o.getClass().getSimpleName();
-    // Known classes get animation parity; everything else is "Warrior"
     if (c.equals("Mage") || c.equals("Warrior") || c.equals("Archer") || c.equals("Healer")) return c;
-    // Walk up parents
     Class<?> p = o.getClass().getSuperclass();
     while (p != null && p != Object.class) {
       String s = p.getSimpleName();
@@ -86,6 +87,32 @@ public class Arena {
       p = p.getSuperclass();
     }
     return "Warrior";
+  }
+
+  // ──────────── Snapshot helpers (called by injected prefix code) ────────────
+
+  /** Read current health-like field. Returns 0 when no field is found so the
+   *  injected prefix never causes a compile or runtime error. */
+  public static int snapshotHealth(Object o) {
+    if (o == null) return 0;
+    int v = readInt(o, "health", "hp", "hitPoints");
+    return v < 0 ? 0 : v;
+  }
+
+  /** Read current shield-like boolean. Returns false if no field is found —
+   *  treated as "wasn't shielded before". */
+  public static boolean snapshotShield(Object o) {
+    if (o == null) return false;
+    String[] names = { "shielded", "isDefending", "defending", "isShielded" };
+    for (String n : names) {
+      try {
+        Field f = findField(o.getClass(), n);
+        if (f == null) continue;
+        f.setAccessible(true);
+        return f.getBoolean(o);
+      } catch (Exception e) { /* try next */ }
+    }
+    return false;
   }
 
   // ──────────── Spawn-cell allocation ────────────
@@ -99,7 +126,7 @@ public class Arena {
 
   // Must stay in sync with frontend's TraceParser SPAWNS_LEFT / SPAWNS_RIGHT.
   private static final int[][] SPAWNS = {
-    {3, 3}, {8, 4},  // col, row — alternating left/right
+    {3, 3}, {8, 4},
     {3, 5}, {8, 6},
     {2, 4}, {9, 3},
     {4, 2}, {7, 7},
@@ -108,11 +135,10 @@ public class Arena {
 
   // ──────────── Idempotency / dedup ────────────
   //
-  // The backend auto-injects Arena.* calls at the end of every student
-  // method. When a subclass method calls super.method(), the super's
-  // injected Arena call fires first, then the override's injection
-  // fires — we'd get the same animation twice. This dedup layer swallows
-  // exact-match emissions that come back-to-back within a short window.
+  // Auto-injection of Arena.* in every recognised method means a super.X()
+  // call would emit the parent's animation, then the override's. Dedup
+  // swallows back-to-back duplicates within a tight window so the rendered
+  // damage covers BOTH bodies' effects in one event.
 
   private static final Set<Integer> SUMMONED = new HashSet<>();
   private static final Map<String, Long> LAST_EMIT = new HashMap<>();
@@ -125,20 +151,24 @@ public class Arena {
     return last != null && (now - last) < DEDUP_WINDOW_NS;
   }
 
+  // ──────────── Object registry (used by the REPL for keypress invocation) ────────────
+
+  static final Map<String, Object> REGISTRY = new HashMap<>();
+
   // ──────────── Trace emission ────────────
 
-  private static void emit(String... parts) {
+  private static synchronized void emit(String... parts) {
     StringBuilder sb = new StringBuilder("##JQ");
     for (String p : parts) { sb.append('\t').append(p == null ? "" : p); }
     System.out.println(sb.toString());
+    System.out.flush();
   }
 
   // ──────────── Public API ────────────
 
-  /** Spawn a character on the arena. Reads name/health/attackPower from the object.
-   *  Also picks a spawn cell and writes it into the object's x/y fields so
-   *  student movement code starts from a valid position.
-   *  Idempotent per object — calling repeatedly for the same instance is a no-op. */
+  /** Spawn a character. Reads name/health/attackPower from the object, picks
+   *  a spawn cell, writes col/row back into x/y, and registers the object
+   *  for later REPL lookup. Idempotent per instance. */
   public static void summon(Object obj) {
     if (obj == null) { emit("warn", "summon called with null"); return; }
     if (!SUMMONED.add(System.identityHashCode(obj))) return;
@@ -152,12 +182,13 @@ public class Arena {
     if (hp < 0) hp = 100;
     if (atk < 0) atk = 15;
 
-    // Allocate a spawn cell and write it into the object if x/y exist.
     int[] cell = SPAWNS[spawnIdx % SPAWNS.length];
     spawnIdx++;
     int col = cell[0], row = cell[1];
     writeInt(obj, col, "x", "col");
     writeInt(obj, row, "y", "row");
+
+    REGISTRY.put(name, obj);
 
     emit("spawn", name, kind,
       String.valueOf(hp), String.valueOf(atk),
@@ -166,7 +197,16 @@ public class Arena {
       String.valueOf(col), String.valueOf(row));
   }
 
-  /** Move a character to a tile. */
+  /** Move snapshot — emits only when (x,y) changed. */
+  public static void move(Object who, int x, int y, int preX, int preY) {
+    if (who == null) return;
+    if (x == preX && y == preY) return;
+    String name = readName(who);
+    if (shouldSuppress("move:" + name + ":" + x + ":" + y)) return;
+    emit("move", name, String.valueOf(x), String.valueOf(y));
+  }
+
+  /** Legacy move — kept for the fallback injection path (no snapshot). */
   public static void move(Object who, int col, int row) {
     if (who == null) return;
     String name = readName(who);
@@ -174,8 +214,17 @@ public class Arena {
     emit("move", name, String.valueOf(col), String.valueOf(row));
   }
 
-  /** Attack: play animation. Injection runs AFTER the student's body so
-   *  target.health has already been updated; we emit the damage delta. */
+  /** Attack — damage is the actual delta the body produced on target.health. */
+  public static void attack(Object attacker, Object target, int preHealth) {
+    if (attacker == null || target == null) { emit("warn", "attack called with null"); return; }
+    String a = readName(attacker), t = readName(target);
+    if (shouldSuppress("attack:" + a + ":" + t)) return;
+    int post = readInt(target, "health", "hp", "hitPoints");
+    int dmg = Math.max(0, preHealth - post);
+    emit("attack", a, t, String.valueOf(dmg), cls(attacker));
+  }
+
+  /** Legacy attack — used when prefix snapshot couldn't be injected. */
   public static void attack(Object attacker, Object target) {
     if (attacker == null || target == null) { emit("warn", "attack called with null"); return; }
     String a = readName(attacker), t = readName(target);
@@ -185,7 +234,16 @@ public class Arena {
     emit("attack", a, t, String.valueOf(dmg), cls(attacker));
   }
 
-  /** Cast a spell on a target (mage-style). */
+  /** Cast — same delta logic as attack, different visual. */
+  public static void cast(Object caster, Object target, int preHealth) {
+    if (caster == null || target == null) return;
+    String c = readName(caster), t = readName(target);
+    if (shouldSuppress("cast:" + c + ":" + t)) return;
+    int post = readInt(target, "health", "hp", "hitPoints");
+    int dmg = Math.max(0, preHealth - post);
+    emit("spell", c, t, String.valueOf(dmg));
+  }
+
   public static void cast(Object caster, Object target) {
     if (caster == null || target == null) return;
     String c = readName(caster), t = readName(target);
@@ -195,7 +253,16 @@ public class Arena {
     emit("spell", c, t, String.valueOf(dmg));
   }
 
-  /** Shoot an arrow at a target (archer-style). */
+  /** Shoot — same delta logic. */
+  public static void shoot(Object archer, Object target, int preHealth) {
+    if (archer == null || target == null) return;
+    String a = readName(archer), t = readName(target);
+    if (shouldSuppress("shoot:" + a + ":" + t)) return;
+    int post = readInt(target, "health", "hp", "hitPoints");
+    int dmg = Math.max(0, preHealth - post);
+    emit("shoot", a, t, String.valueOf(dmg));
+  }
+
   public static void shoot(Object archer, Object target) {
     if (archer == null || target == null) return;
     String a = readName(archer), t = readName(target);
@@ -205,18 +272,39 @@ public class Arena {
     emit("shoot", a, t, String.valueOf(dmg));
   }
 
-  /** Heal a target by `amount`. */
-  public static void heal(Object healer, Object target, int amount) {
+  /** Heal — amount is positive delta in target.health. */
+  public static void heal(Object healer, Object target, int preHealth) {
     if (target == null) return;
     String h = readName(healer == null ? target : healer), t = readName(target);
-    if (shouldSuppress("heal:" + h + ":" + t + ":" + amount)) return;
-    emit("heal", h, t, String.valueOf(amount));
+    int post = readInt(target, "health", "hp", "hitPoints");
+    int amt = Math.max(0, post - preHealth);
+    if (shouldSuppress("heal:" + h + ":" + t + ":" + amt)) return;
+    emit("heal", h, t, String.valueOf(amt));
   }
 
-  /** Heal self. */
-  public static void heal(Object target, int amount) { heal(target, target, amount); }
+  /** Legacy heal — fallback when prefix wasn't injected. */
+  public static void heal(Object target, int amount) {
+    if (target == null) return;
+    String t = readName(target);
+    if (shouldSuppress("heal:" + t + ":" + t + ":" + amount)) return;
+    emit("heal", t, t, String.valueOf(amount));
+  }
 
-  /** Raise a shield (halves incoming damage for a few seconds). */
+  /** Defend — emits ONLY when shielded transitions false→true. The frontend
+   *  shows the shield, and this class schedules its own auto-clear so the
+   *  reset timer can't race with the dedup window. */
+  public static void defend(Object who, boolean preShield) {
+    if (who == null) return;
+    if (preShield) return;                 // already shielded → no new event
+    boolean now = snapshotShield(who);
+    if (!now) return;                      // body didn't set the flag
+    String n = readName(who);
+    if (shouldSuppress("defend:" + n)) return;
+    emit("defend", n);
+    scheduleShieldReset(who, 3000);
+  }
+
+  /** Legacy defend — fallback when prefix wasn't injected. Always emits. */
   public static void defend(Object who) {
     if (who == null) return;
     String n = readName(who);
@@ -233,5 +321,141 @@ public class Arena {
   /** Mark the start of a named round / phase (purely cosmetic log divider). */
   public static void phase(String label) {
     emit("phase", label == null ? "" : label);
+  }
+
+  // ──────────── Shield auto-reset (JVM-side timer) ────────────
+
+  private static final ScheduledExecutorService SHIELD = Executors.newSingleThreadScheduledExecutor(r -> {
+    Thread t = new Thread(r, "jq-shield"); t.setDaemon(true); return t;
+  });
+
+  private static void scheduleShieldReset(Object who, long ms) {
+    SHIELD.schedule(() -> {
+      try {
+        Field f = findShieldField(who.getClass());
+        if (f != null) {
+          f.setAccessible(true);
+          f.setBoolean(who, false);
+        }
+        emit("shieldExpired", readName(who));
+      } catch (Exception ignore) { /* swallow — shield expiry is best-effort */ }
+    }, ms, TimeUnit.MILLISECONDS);
+  }
+
+  private static Field findShieldField(Class<?> cls) {
+    String[] names = { "shielded", "isDefending", "defending", "isShielded" };
+    for (String n : names) {
+      Field f = findField(cls, n);
+      if (f != null) return f;
+    }
+    return null;
+  }
+
+  // ──────────── REPL (long-running session) ────────────
+  //
+  // After main() finishes setting up objects (and the auto-injected
+  // Arena.summon calls populate REGISTRY), the wrapper appends Arena.repl()
+  // as the last line of main(). repl() blocks reading commands from stdin
+  // and dispatches them — keypresses in the browser become method calls on
+  // the actual student objects, with all the body-level WYSIWYG that comes
+  // from running their compiled code.
+  //
+  // Protocol — one tab-separated command per line:
+  //   invoke\t<callerName>\t<methodName>[\t<argName>]
+  //   enemyAttack\t<attackerName>\t<targetName>
+  //   ping
+  //   quit
+
+  public static void repl() {
+    emit("ready");
+    try (BufferedReader in = new BufferedReader(new InputStreamReader(System.in))) {
+      String line;
+      while ((line = in.readLine()) != null) {
+        if (line.isEmpty()) continue;
+        String[] p = line.split("\t");
+        try {
+          switch (p[0]) {
+            case "invoke":
+              if (p.length < 3) { emit("warn", "invoke needs caller + method"); break; }
+              dispatch(p[1], p[2], p.length > 3 ? p[3] : null);
+              break;
+            case "enemyAttack":
+              if (p.length < 3) { emit("warn", "enemyAttack needs attacker + target"); break; }
+              enemyAttack(p[1], p[2]);
+              break;
+            case "ping":
+              emit("pong");
+              break;
+            case "quit":
+              return;
+            default:
+              emit("warn", "unknown command " + p[0]);
+          }
+        } catch (Throwable ex) {
+          emit("warn", "dispatch error: " + ex.getClass().getSimpleName() + ": "
+            + (ex.getMessage() == null ? "" : ex.getMessage()));
+        }
+      }
+    } catch (IOException ignore) {
+      // stdin closed → exit gracefully
+    }
+  }
+
+  /** Reflectively invoke caller.method(arg?) on the student's compiled class. */
+  private static void dispatch(String callerName, String methodName, String argName) throws Exception {
+    Object caller = REGISTRY.get(callerName);
+    if (caller == null) { emit("warn", "unknown actor " + callerName); return; }
+    Object arg = argName == null ? null : REGISTRY.get(argName);
+    if (argName != null && arg == null) {
+      emit("warn", "unknown target " + argName);
+      return;
+    }
+    Method m = pickMethod(caller.getClass(), methodName, arg);
+    if (m == null) {
+      emit("warn", callerName + " has no method " + methodName
+        + (arg == null ? "()" : "(" + arg.getClass().getSimpleName() + ")"));
+      return;
+    }
+    m.setAccessible(true);
+    if (arg == null) m.invoke(caller);
+    else m.invoke(caller, arg);
+  }
+
+  /** Pick a method by name + arity. With one arg, prefer overloads whose
+   *  parameter type is assignable from the actual argument. Falls back to
+   *  the first arity match if none assignable. */
+  private static Method pickMethod(Class<?> cls, String name, Object arg) {
+    int wantArity = arg == null ? 0 : 1;
+    Method best = null;
+    for (Method m : cls.getMethods()) {
+      if (!m.getName().equals(name)) continue;
+      if (m.getParameterCount() != wantArity) continue;
+      if (wantArity == 0) return m;
+      Class<?> p = m.getParameterTypes()[0];
+      if (p.isAssignableFrom(arg.getClass())) return m;   // exact-ish match
+      if (best == null) best = m;                          // arity match, lower priority
+    }
+    if (best != null) return best;
+    // Try declared methods (catches package-private overrides)
+    for (Method m : cls.getDeclaredMethods()) {
+      if (m.getName().equals(name) && m.getParameterCount() == wantArity) return m;
+    }
+    return null;
+  }
+
+  /** Bypass student code — guarantees enemies always work. Reads attackPower
+   *  off the attacker, halves if the target is currently shielded, applies
+   *  the damage directly to target.health, emits a trace. */
+  private static void enemyAttack(String aName, String tName) {
+    Object a = REGISTRY.get(aName);
+    Object t = REGISTRY.get(tName);
+    if (a == null || t == null) { emit("warn", "enemyAttack missing actor"); return; }
+    int atk = readInt(a, "attackPower", "attack", "atk", "damage", "power");
+    if (atk < 0) atk = 10;
+    boolean shielded = snapshotShield(t);
+    int dmg = shielded ? Math.max(1, atk / 2) : atk;
+    int hp = readInt(t, "health", "hp", "hitPoints");
+    if (hp >= 0) writeInt(t, Math.max(0, hp - dmg), "health", "hp", "hitPoints");
+    emit("enemyAttack", aName, tName, String.valueOf(dmg), shielded ? "1" : "0");
   }
 }

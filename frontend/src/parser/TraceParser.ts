@@ -16,7 +16,10 @@
 import type { SpawnData } from './ActionExecutor'
 
 export interface TraceAction {
-  type: 'spawn' | 'move' | 'attack' | 'spell' | 'shoot' | 'heal' | 'defend' | 'log' | 'phase'
+  type:
+    | 'spawn' | 'move' | 'attack' | 'spell' | 'shoot' | 'heal' | 'defend'
+    | 'shieldExpired' | 'enemyAttack'
+    | 'log' | 'phase' | 'ready' | 'pong' | 'warn'
   name: string
   data?: SpawnData
   target?: string
@@ -25,6 +28,8 @@ export interface TraceAction {
   text?: string
   color?: string
   value?: number
+  /** For enemyAttack: '1' if the target was shielded (damage halved). */
+  shielded?: boolean
   delay: number
 }
 
@@ -46,6 +51,90 @@ const SPAWNS_RIGHT = [
 
 const MAX_ACTIONS = 500
 
+/** Convert one parsed ##JQ event into a TraceAction. Used both by the legacy
+ *  whole-stdout parser AND by the streaming SessionClient consumer.
+ *
+ *  spawnIdxRef.current is mutated when a spawn lacks server-supplied col/row
+ *  so we can fall back to the alternating-side allocator. */
+export function eventToAction(
+  type: string,
+  parts: string[],
+  spawnIdxRef: { current: number },
+  delay: number,
+): TraceAction | null {
+  switch (type) {
+    case 'spawn': {
+      const [name, cls, hpS, atkS, manaS, defS, arrowsS, colS, rowS] = parts
+      const hp = parseInt(hpS) || 100
+      const atk = parseInt(atkS) || 15
+      let col: number, row: number
+      if (colS != null && rowS != null && !isNaN(parseInt(colS))) {
+        col = parseInt(colS); row = parseInt(rowS)
+      } else {
+        const sp = spawnIdxRef.current % 2 === 0
+          ? SPAWNS_LEFT[Math.floor(spawnIdxRef.current / 2) % SPAWNS_LEFT.length]
+          : SPAWNS_RIGHT[Math.floor(spawnIdxRef.current / 2) % SPAWNS_RIGHT.length]
+        col = sp.c; row = sp.r
+      }
+      spawnIdxRef.current++
+      const data: SpawnData = {
+        className: cls || 'Warrior',
+        col, row,
+        hp, maxHp: hp, atk,
+        mana: parseInt(manaS) || 0,
+        def: parseInt(defS) || 0,
+        arrows: parseInt(arrowsS) || 0,
+        nameStr: name,
+        methods: [],
+      }
+      return { type: 'spawn', name, data, delay }
+    }
+    case 'move':
+      return { type: 'move', name: parts[0],
+        col: parseInt(parts[1]), row: parseInt(parts[2]), delay }
+    case 'attack':
+      return { type: 'attack', name: parts[0], target: parts[1],
+        value: parseInt(parts[2]) || 0, delay }
+    case 'spell':
+      return { type: 'spell', name: parts[0], target: parts[1],
+        value: parseInt(parts[2]) || 0, delay }
+    case 'shoot':
+      return { type: 'shoot', name: parts[0], target: parts[1],
+        value: parseInt(parts[2]) || 0, delay }
+    case 'heal':
+      return { type: 'heal', name: parts[0], target: parts[1],
+        value: parseInt(parts[2]) || 0, delay }
+    case 'defend':
+      return { type: 'defend', name: parts[0], delay }
+    case 'shieldExpired':
+      return { type: 'shieldExpired', name: parts[0], delay }
+    case 'enemyAttack':
+      return { type: 'enemyAttack', name: parts[0], target: parts[1],
+        value: parseInt(parts[2]) || 0, shielded: parts[3] === '1', delay }
+    case 'say':
+      return { type: 'log', name: '',
+        text: '> ' + parts.join('\t'), color: '#B0BEC5', delay }
+    case 'phase':
+      return { type: 'phase', name: '',
+        text: '── ' + parts.join('\t') + ' ──', color: '#ffb84d', delay }
+    case 'ready':
+      return { type: 'ready', name: '', delay }
+    case 'pong':
+      return { type: 'pong', name: '', delay }
+    case 'warn':
+      return { type: 'warn', name: '', text: parts.join('\t'), color: '#FF9800', delay }
+  }
+  return null
+}
+
+// Per-event delay budgets (ms). Used by both the legacy whole-stdout parser
+// and the streaming consumer when it needs to space animations apart.
+const ACTION_DELAY: Record<string, number> = {
+  spawn: 500, move: 700, attack: 900, spell: 1100, shoot: 1000,
+  heal: 900, defend: 600, shieldExpired: 0, enemyAttack: 900,
+  say: 300, phase: 400, ready: 0, pong: 0, warn: 0,
+}
+
 export function parseTrace(stdout: string): TraceResult {
   const actions: TraceAction[] = []
   const charMap: Record<string, SpawnData> = {}
@@ -53,8 +142,7 @@ export function parseTrace(stdout: string): TraceResult {
   const warnings: string[] = []
   const eventCounts: Record<string, number> = {}
 
-  let spawnIdx = 0
-  // How many spawn events we've emitted (used for initial staggered delay)
+  const spawnIdxRef = { current: 0 }
   let delay = 0
   let truncated = false
 
@@ -69,128 +157,23 @@ export function parseTrace(stdout: string): TraceResult {
 
     if (actions.length >= MAX_ACTIONS) { truncated = true; continue }
 
-    // Allow either tab or single-space separator (defensive)
     const sep = line.includes('\t') ? '\t' : ' '
     const parts = line.split(sep)
     const type = parts[1]
     const rest = parts.slice(2)
     eventCounts[type] = (eventCounts[type] || 0) + 1
 
-    switch (type) {
-      case 'spawn': {
-        const [name, cls, hpS, atkS, manaS, defS, arrowsS, colS, rowS] = rest
-        const hp = parseInt(hpS) || 100
-        const atk = parseInt(atkS) || 15
-        // Spawn cell: if server supplied one (new protocol), use it.
-        // Otherwise fall back to the old roster-based allocation.
-        let col: number, row: number
-        if (colS != null && rowS != null && !isNaN(parseInt(colS))) {
-          col = parseInt(colS)
-          row = parseInt(rowS)
-        } else {
-          const sp = spawnIdx % 2 === 0
-            ? SPAWNS_LEFT[Math.floor(spawnIdx / 2) % SPAWNS_LEFT.length]
-            : SPAWNS_RIGHT[Math.floor(spawnIdx / 2) % SPAWNS_RIGHT.length]
-          col = sp.c; row = sp.r
-        }
-        spawnIdx++
-        const data: SpawnData = {
-          className: cls || 'Warrior',
-          col, row,
-          hp, maxHp: hp, atk,
-          mana: parseInt(manaS) || 0,
-          def: parseInt(defS) || 0,
-          arrows: parseInt(arrowsS) || 0,
-          nameStr: name,
-          methods: [],
-        }
-        charMap[name] = data
-        actions.push({ type: 'spawn', name, data, delay })
-        delay += 500
-        break
-      }
-      case 'move': {
-        const [name, colS, rowS] = rest
-        actions.push({
-          type: 'move', name,
-          col: parseInt(colS), row: parseInt(rowS),
-          delay,
-        })
-        delay += 700
-        break
-      }
-      case 'attack': {
-        const [attacker, target, dmgS] = rest
-        actions.push({
-          type: 'attack', name: attacker, target,
-          value: parseInt(dmgS) || 0,
-          delay,
-        })
-        delay += 900
-        break
-      }
-      case 'spell': {
-        const [caster, target, dmgS] = rest
-        actions.push({
-          type: 'spell', name: caster, target,
-          value: parseInt(dmgS) || 0,
-          delay,
-        })
-        delay += 1100
-        break
-      }
-      case 'shoot': {
-        const [archer, target, dmgS] = rest
-        actions.push({
-          type: 'shoot', name: archer, target,
-          value: parseInt(dmgS) || 0,
-          delay,
-        })
-        delay += 1000
-        break
-      }
-      case 'heal': {
-        const [healer, target, amtS] = rest
-        actions.push({
-          type: 'heal', name: healer, target,
-          value: parseInt(amtS) || 0,
-          delay,
-        })
-        delay += 900
-        break
-      }
-      case 'defend': {
-        const [name] = rest
-        actions.push({ type: 'defend', name, delay })
-        delay += 600
-        break
-      }
-      case 'say': {
-        actions.push({
-          type: 'log', name: '',
-          text: '> ' + rest.join(sep),
-          color: '#B0BEC5', delay,
-        })
-        delay += 300
-        break
-      }
-      case 'phase': {
-        actions.push({
-          type: 'phase', name: '',
-          text: '── ' + rest.join(sep) + ' ──',
-          color: '#ffb84d', delay,
-        })
-        delay += 400
-        break
-      }
-      case 'warn': {
-        warnings.push(rest.join(sep))
-        break
-      }
-      default:
-        // Unknown trace type — keep it visible but don't animate
-        cleanLines.push(line)
+    if (type === 'warn') {
+      warnings.push(rest.join(sep))
+      continue
     }
+
+    const action = eventToAction(type, rest, spawnIdxRef, delay)
+    if (!action) { cleanLines.push(line); continue }
+
+    if (action.type === 'spawn' && action.data) charMap[action.name] = action.data
+    actions.push(action)
+    delay += ACTION_DELAY[type] ?? 0
   }
 
   if (truncated) {

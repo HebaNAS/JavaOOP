@@ -1,15 +1,22 @@
 import { useGameStore } from '../state/gameStore'
 import { isWalkable } from '../scene/Terrain'
-import { Sounds } from '../assets/sounds'
+import { session } from '../api/session'
 
-// Maps key bindings defined by student Java code to game actions
-// When student defines moveUp(), moveDown(), moveLeft(), moveRight() in their class,
-// those methods get bound to WASD/arrow keys for the selected character
+// Maps key bindings defined by student Java code to game actions.
+//
+// When student code defines moveUp/moveDown/moveLeft/moveRight, attack,
+// defend, castSpell, shoot, or heal, those methods get bound to keys.
+// On keypress we send `invoke <name> <method> [<targetName>]` to the
+// long-running JVM session — the student's compiled body runs there,
+// and the resulting ##JQ trace events drive the on-screen response.
+//
+// Targets are picked client-side (nearest live other) but ALL state
+// changes come back from the JVM trace stream.
 
 export interface KeyBinding {
-  key: string        // keyboard key (w, a, s, d, space, etc.)
-  method: string     // Java method name
-  charId: string     // which character owns this binding
+  key: string
+  method: string
+  charId: string
 }
 
 let activeBindings: KeyBinding[] = []
@@ -20,7 +27,7 @@ const METHOD_KEY_MAP: Record<string, string[]> = {
   moveDown:  ['s', 'ArrowDown'],
   moveLeft:  ['a', 'ArrowLeft'],
   moveRight: ['d', 'ArrowRight'],
-  attack:    [' '],        // space
+  attack:    [' '],
   defend:    ['q'],
   castSpell: ['e'],
   shoot:     ['e'],
@@ -28,19 +35,19 @@ const METHOD_KEY_MAP: Record<string, string[]> = {
   jump:      [' '],
 }
 
+const MOVE_METHODS = new Set(['moveUp', 'moveDown', 'moveLeft', 'moveRight'])
+const TARGETED_METHODS = new Set(['attack', 'castSpell', 'shoot'])
+// heal: invoked without a target; the student's code decides who to heal
+// (usually self via Healable.heal(int amount), or a parameter they pass).
+
 export function setupKeyboardBindings(charMethods: { charId: string; methods: string[] }[]) {
-  // Clear old listener
   clearKeyboardBindings()
 
   activeBindings = []
   charMethods.forEach(({ charId, methods }) => {
     methods.forEach((method) => {
       const keys = METHOD_KEY_MAP[method]
-      if (keys) {
-        keys.forEach((key) => {
-          activeBindings.push({ key, method, charId })
-        })
-      }
+      if (keys) keys.forEach((key) => activeBindings.push({ key, method, charId }))
     })
   })
 
@@ -62,14 +69,14 @@ export function setupKeyboardBindings(charMethods: { charId: string; methods: st
     const binding = activeBindings.find((b) => b.key === e.key && b.charId === selectedId)
     if (!binding) return
 
-    // Cooldown to prevent spam
+    // Cooldown so a held key doesn't flood the JVM with commands.
     const now = Date.now()
     const cooldownKey = `${binding.charId}-${binding.method}`
     if (cooldowns.has(cooldownKey) && now - cooldowns.get(cooldownKey)! < 400) return
     cooldowns.set(cooldownKey, now)
 
     e.preventDefault()
-    executeKeyAction(binding.method, selectedId)
+    dispatchKeyAction(binding.method, selectedId)
   }
 
   window.addEventListener('keydown', keyListener)
@@ -83,135 +90,60 @@ export function clearKeyboardBindings() {
   activeBindings = []
 }
 
-function executeKeyAction(method: string, charId: string) {
+function dispatchKeyAction(method: string, charId: string) {
   const store = useGameStore.getState()
   const ch = store.characters.find((c) => c.id === charId)
   if (!ch || ch.hp <= 0) return
 
-  if (method === 'moveUp' && isWalkable(ch.targetCol, ch.targetRow - 1)) {
-    store.moveCharacter(charId, ch.targetCol, ch.targetRow - 1)
-    store.addLog(`⌨️ ${ch.name}.moveUp()`, '#42A5F5')
+  // No live JVM session → tell the student to click Run. This is what
+  // happens when the editor was modified after a successful Run; the
+  // App tears the session down so stale keypresses can't fire old code.
+  if (!session.isAlive()) {
+    store.addLog('⏸️ No active session — click ▶ Run to apply your latest code.', '#FFC107')
+    return
   }
-  else if (method === 'moveDown' && isWalkable(ch.targetCol, ch.targetRow + 1)) {
-    store.moveCharacter(charId, ch.targetCol, ch.targetRow + 1)
-    store.addLog(`⌨️ ${ch.name}.moveDown()`, '#42A5F5')
-  }
-  else if (method === 'moveLeft' && isWalkable(ch.targetCol - 1, ch.targetRow)) {
-    store.moveCharacter(charId, ch.targetCol - 1, ch.targetRow)
-    store.addLog(`⌨️ ${ch.name}.moveLeft()`, '#42A5F5')
-  }
-  else if (method === 'moveRight' && isWalkable(ch.targetCol + 1, ch.targetRow)) {
-    store.moveCharacter(charId, ch.targetCol + 1, ch.targetRow)
-    store.addLog(`⌨️ ${ch.name}.moveRight()`, '#42A5F5')
-  }
-  else if (method === 'attack') {
-    const target = findNearestOther(ch, store.characters)
-    if (target) {
-      Sounds.slash()
-      store.updateCharacter(charId, { animState: 'attack' })
-      const dmg = ch.atk
-      setTimeout(() => {
-        Sounds.damage()
-        store.damageCharacter(target.id, dmg)
-        store.addEffect({
-          id: `sl-${Date.now()}`, type: 'slash',
-          from: [ch.targetCol, 0.5, ch.targetRow],
-          to: [target.targetCol, 0.5, target.targetRow],
-          startTime: 0, duration: 0.4,
-        })
-        store.addEffect({
-          id: `dmg-${Date.now()}`, type: 'damage',
-          from: [target.targetCol, 0.8, target.targetRow],
-          to: [target.targetCol, 0.8, target.targetRow],
-          value: dmg, color: '#F44336', startTime: 0, duration: 1.2,
-        })
-        store.addLog(`⚔️ ${ch.name} attacks ${target.name} for ${dmg}! [SPACE]`, '#F44336')
-      }, 200)
-      setTimeout(() => store.updateCharacter(charId, { animState: 'idle' }), 600)
+
+  // Movement: pre-check walkability so students can't wander into water,
+  // but don't apply the movement locally — the JVM is the source of truth
+  // and emits a `move` trace once the student's body actually runs.
+  if (MOVE_METHODS.has(method)) {
+    const dx = method === 'moveLeft' ? -1 : method === 'moveRight' ? 1 : 0
+    const dy = method === 'moveUp' ? -1 : method === 'moveDown' ? 1 : 0
+    if (!isWalkable(ch.targetCol + dx, ch.targetRow + dy)) {
+      store.addLog(`🚧 ${ch.name} is blocked — can't ${method}() through that.`, '#FF9800')
+      return
     }
+    session.invoke(ch.id, method)
+    return
   }
-  else if (method === 'defend') {
-    Sounds.shield()
-    // defend() activates a shield — halves all incoming damage for 3 seconds
-    // Hint: This works because isDefending reduces damage in the game engine.
-    // In Java terms, defend() sets an internal state that modifies how damage is calculated.
-    store.updateCharacter(charId, { animState: 'defend', isDefending: true })
-    store.addEffect({
-      id: `sh-${Date.now()}`, type: 'shield',
-      from: [ch.targetCol, 0.5, ch.targetRow],
-      to: [ch.targetCol, 0.5, ch.targetRow],
-      startTime: 0, duration: 3.0,
-    })
-    store.addLog(`🛡️ ${ch.name} defends! Damage halved for 3s [Q]`, '#42A5F5')
-    setTimeout(() => store.updateCharacter(charId, { animState: 'idle', isDefending: false }), 3000)
-  }
-  else if (method === 'castSpell') {
-    const target = findNearestOther(ch, store.characters)
-    if (target) {
-      Sounds.fireball()
-      store.updateCharacter(charId, { animState: 'cast' })
-      store.addEffect({
-        id: `fb-${Date.now()}`, type: 'fireball',
-        from: [ch.targetCol, 0.7, ch.targetRow],
-        to: [target.targetCol, 0.5, target.targetRow],
-        startTime: 0, duration: 0.8,
-      })
-      setTimeout(() => {
-        store.damageCharacter(target.id, ch.atk)
-        store.addEffect({
-          id: `dmg-${Date.now()}`, type: 'damage',
-          from: [target.targetCol, 0.8, target.targetRow],
-          to: [target.targetCol, 0.8, target.targetRow],
-          value: ch.atk, color: '#AB47BC', startTime: 0, duration: 1.2,
-        })
-        store.addLog(`🔮 ${ch.name} casts spell on ${target.name} for ${ch.atk}! [E]`, '#AB47BC')
-      }, 500)
-      setTimeout(() => store.updateCharacter(charId, { animState: 'idle' }), 800)
+
+  // Targeted methods need a victim. Honour a manually-clicked target if the
+  // student set one (red ring on a character); otherwise fall back to the
+  // nearest live "other" character so the original auto-aim still works
+  // when no one's been clicked.
+  if (TARGETED_METHODS.has(method)) {
+    let target: { id: string } | null = null
+    if (store.targetId) {
+      const picked = store.characters.find((c) => c.id === store.targetId && c.hp > 0)
+      if (picked) target = picked
     }
-  }
-  else if (method === 'shoot') {
-    const target = findNearestOther(ch, store.characters)
-    if (target && ch.arrows > 0) {
-      Sounds.arrow()
-      store.updateCharacter(charId, { arrows: ch.arrows - 1 })
-      store.addEffect({
-        id: `ar-${Date.now()}`, type: 'arrow',
-        from: [ch.targetCol, 0.6, ch.targetRow],
-        to: [target.targetCol, 0.5, target.targetRow],
-        startTime: 0, duration: 0.6,
-      })
-      setTimeout(() => {
-        store.damageCharacter(target.id, ch.atk)
-        store.addEffect({
-          id: `dmg-${Date.now()}`, type: 'damage',
-          from: [target.targetCol, 0.8, target.targetRow],
-          to: [target.targetCol, 0.8, target.targetRow],
-          value: ch.atk, color: '#FFEB3B', startTime: 0, duration: 1.2,
-        })
-        store.addLog(`🏹 ${ch.name} shoots ${target.name} for ${ch.atk}! (${ch.arrows - 1} arrows left) [E]`, '#FF9800')
-      }, 400)
+    if (!target) target = findNearestOther(ch, store.characters)
+    if (!target) {
+      store.addLog(`👻 No target in range for ${ch.name}.${method}(). Click an enemy to lock it.`, '#FF9800')
+      return
     }
+    session.invoke(ch.id, method, target.id)
+    return
   }
-  else if (method === 'heal') {
-    Sounds.heal()
-    store.healCharacter(charId, ch.atk)
-    store.addEffect({
-      id: `hl-${Date.now()}`, type: 'heal',
-      from: [ch.targetCol, 0.5, ch.targetRow],
-      to: [ch.targetCol, 0.5, ch.targetRow],
-      startTime: 0, duration: 1.0,
-    })
-    store.addEffect({
-      id: `dmg-${Date.now()}`, type: 'damage',
-      from: [ch.targetCol, 0.8, ch.targetRow],
-      to: [ch.targetCol, 0.8, ch.targetRow],
-      value: ch.atk, color: '#4CAF50', startTime: 0, duration: 1.2,
-    })
-    store.addLog(`✨ ${ch.name} heals for ${ch.atk}! [R]`, '#4CAF50')
-  }
+
+  // defend, heal, jump, etc. — no target argument.
+  session.invoke(ch.id, method)
 }
 
-function findNearestOther(ch: { id: string; targetCol: number; targetRow: number }, characters: { id: string; targetCol: number; targetRow: number; hp: number }[]) {
+function findNearestOther(
+  ch: { id: string; targetCol: number; targetRow: number },
+  characters: { id: string; targetCol: number; targetRow: number; hp: number }[],
+) {
   let best = null
   let bestDist = Infinity
   for (const other of characters) {
@@ -221,5 +153,5 @@ function findNearestOther(ch: { id: string; targetCol: number; targetRow: number
     const dist = Math.sqrt(dx * dx + dz * dz)
     if (dist < bestDist) { bestDist = dist; best = other }
   }
-  return bestDist <= 4 ? best : null // max range 4 tiles
+  return bestDist <= 4 ? best : null
 }

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Sounds } from '../assets/sounds'
+import { session } from '../api/session'
 
 export interface CharacterState {
   id: string
@@ -41,7 +41,11 @@ export interface LogEntry {
 interface GameStore {
   characters: CharacterState[]
   effects: EffectInstance[]
+  /** The character the keyboard controls (your hero). */
   selectedId: string | null
+  /** The character keypress combat methods will hit. Click another character
+   *  to set this; falls back to nearest-other when null. */
+  targetId: string | null
   logs: LogEntry[]
   showConfetti: boolean
   enemyTimers: number[]
@@ -52,6 +56,7 @@ interface GameStore {
   damageCharacter: (id: string, amount: number) => void
   healCharacter: (id: string, amount: number) => void
   selectCharacter: (id: string | null) => void
+  setTarget: (id: string | null) => void
   addEffect: (effect: EffectInstance) => void
   removeEffect: (id: string) => void
   addLog: (text: string, color?: string) => void
@@ -63,6 +68,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   characters: [],
   effects: [],
   selectedId: null,
+  targetId: null,
   logs: [],
   showConfetti: false,
   enemyTimers: [],
@@ -79,18 +85,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
     characters: s.characters.map((c) => (c.id === id ? { ...c, ...patch } : c)),
   })),
 
-  damageCharacter: (id, amount) => set((s) => ({
-    characters: s.characters.map((c) => {
+  damageCharacter: (id, amount) => set((s) => {
+    const characters = s.characters.map((c) => {
       if (c.id !== id) return c
-      // Defend halves damage
+      // Defend halves damage. Note: with WYSIWYG, the JVM has already done
+      // its own halving in enemyAttack — but the local frontend mirror also
+      // applies it here for actions that didn't go through the JVM (legacy).
       const finalDmg = c.isDefending ? Math.floor(amount / 2) : amount
       return {
         ...c,
         hp: Math.max(0, c.hp - finalDmg),
         animState: (c.hp - finalDmg <= 0 ? 'dead' : 'hurt') as CharacterState['animState'],
       }
-    }),
-  })),
+    })
+    // If the character we just hit is now dead and was the target, clear it.
+    const targetId = s.targetId && characters.find((c) => c.id === s.targetId)?.hp === 0
+      ? null
+      : s.targetId
+    return { characters, targetId }
+  }),
 
   healCharacter: (id, amount) => set((s) => ({
     characters: s.characters.map((c) =>
@@ -99,6 +112,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   })),
 
   selectCharacter: (id) => set({ selectedId: id }),
+
+  setTarget: (id) => set({ targetId: id }),
 
   addEffect: (effect) => set((s) => ({ effects: [...s.effects, effect] })),
   removeEffect: (id) => set((s) => ({ effects: s.effects.filter((e) => e.id !== id) })),
@@ -115,24 +130,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
   clearScene: () => {
     // Clear enemy timers
     get().enemyTimers.forEach((t) => clearInterval(t))
-    set({ characters: [], effects: [], enemyTimers: [], showConfetti: false })
+    set({ characters: [], effects: [], enemyTimers: [], showConfetti: false, targetId: null })
   },
 }))
 
 // ─── ENEMY AI ───
-// Call this after spawning characters to start enemy AI
+// Picks a player target every 3 seconds and asks the JVM session to apply
+// the damage. The JVM is the source of truth: it reads enemy.attackPower,
+// honours the target's `shielded` flag, mutates target.health, and emits
+// an enemyAttack trace that the frontend renders. The frontend never
+// applies damage locally — it only animates the response.
 export function startEnemyAI() {
   const store = useGameStore.getState
 
   const timer = window.setInterval(() => {
-    const { characters, addLog, addEffect, damageCharacter } = store()
+    const { characters } = store()
     const enemies = characters.filter((c) => c.isEnemy && c.hp > 0)
     const players = characters.filter((c) => !c.isEnemy && c.hp > 0)
-
     if (enemies.length === 0 || players.length === 0) return
 
     enemies.forEach((enemy) => {
-      // Pick random player target
       const target = players[Math.floor(Math.random() * players.length)]
       if (!target) return
 
@@ -141,40 +158,20 @@ export function startEnemyAI() {
       const dist = Math.sqrt(dx * dx + dz * dz)
 
       if (dist <= 3) {
-        // Attack
-        const dmg = enemy.atk
-        Sounds.enemyAttack()
-
-        useGameStore.getState().updateCharacter(enemy.id, { animState: 'attack' })
-        addEffect({
-          id: `esl-${Date.now()}-${enemy.id}`, type: 'slash',
-          from: [enemy.targetCol, 0.5, enemy.targetRow],
-          to: [target.targetCol, 0.5, target.targetRow],
-          startTime: 0, duration: 0.4,
-        })
-
-        setTimeout(() => {
-          damageCharacter(target.id, dmg)
-          const was = useGameStore.getState().characters.find((c) => c.id === target.id)
-          const blocked = was?.isDefending ? ' (BLOCKED! 50% reduced)' : ''
-          addEffect({
-            id: `edmg-${Date.now()}`, type: 'damage',
-            from: [target.targetCol, 0.8, target.targetRow],
-            to: [target.targetCol, 0.8, target.targetRow],
-            value: was?.isDefending ? Math.floor(dmg / 2) : dmg,
-            color: '#F44336', startTime: 0, duration: 1.2,
-          })
-          addLog(`👹 ${enemy.name} attacks ${target.name}!${blocked}`, '#F44336')
-        }, 300)
-        setTimeout(() => useGameStore.getState().updateCharacter(enemy.id, { animState: 'idle' }), 700)
+        // In range — let the JVM compute and apply the damage. The trace
+        // will come back as an `enemyAttack` action and ActionExecutor
+        // will play the slash + damage popup + log line.
+        session.enemyAttack(enemy.id, target.id)
       } else {
-        // Move closer
+        // Out of range — close the gap. Movement is purely cosmetic on
+        // the frontend (enemies aren't student-controlled), so we don't
+        // bounce this through the JVM.
         const moveCol = enemy.targetCol + Math.sign(dx)
         const moveRow = enemy.targetRow + Math.sign(dz)
         useGameStore.getState().moveCharacter(enemy.id, moveCol, moveRow)
       }
     })
-  }, 3000) // Enemy acts every 3 seconds
+  }, 3000)
 
   useGameStore.setState((s) => ({ enemyTimers: [...s.enemyTimers, timer] }))
 }

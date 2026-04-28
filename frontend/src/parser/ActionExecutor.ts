@@ -430,6 +430,197 @@ export function executeActions(actions: GameAction[], addLog: (text: string, col
 // animation counts come from real runtime — no more regex heuristics.
 // ═══════════════════════════════════════════════════════════════════════
 
+/** Apply ONE TraceAction immediately. Used by both the legacy whole-trace
+ *  consumer (executeTraceActions) and the streaming SessionClient consumer
+ *  in App.tsx. The shield auto-clear is owned by the JVM (shieldExpired
+ *  trace), so this function never schedules its own reset timer. */
+export function executeTraceActionStream(
+  action: TraceAction,
+  addLog: (text: string, color?: string) => void,
+) {
+  const store = useGameStore.getState
+  const s = store()
+  const { spawnCharacter, moveCharacter, updateCharacter, damageCharacter, healCharacter, addEffect, selectCharacter } = s
+
+  if (action.type === 'spawn' && action.data) {
+    const d = action.data
+    // The right-side spawn cells are reserved for enemies; this lets the
+    // frontend tag them so the AI loop knows who to attack.
+    const isEnemy = d.col >= 7
+    spawnCharacter({
+      id: action.name, name: d.nameStr, className: d.className as CharacterState['className'],
+      col: d.col, row: d.row, targetCol: d.col, targetRow: d.row,
+      hp: d.hp, maxHp: d.maxHp, atk: d.atk, mana: d.mana, def: d.def, arrows: d.arrows,
+      isDefending: false, animState: 'idle', facingAngle: d.col > 6 ? Math.PI : 0,
+      isEnemy,
+    })
+    Sounds.spawn()
+    addLog(`⚔️ ${d.nameStr} (${d.className}) summoned! HP:${d.hp} ATK:${d.atk}`, '#4CAF50')
+    return
+  }
+
+  if (action.type === 'move' && action.col !== undefined && action.row !== undefined) {
+    moveCharacter(action.name, action.col, action.row)
+    selectCharacter(action.name)
+    addLog(`🚶 ${action.name} → (${action.col}, ${action.row})`, '#42A5F5')
+    return
+  }
+
+  if (action.type === 'attack' && action.target) {
+    const chars = store().characters
+    const atk = chars.find((c) => c.id === action.name)
+    const tgt = chars.find((c) => c.id === action.target)
+    if (!atk || !tgt) {
+      addLog(`⚠️ attack: ${!atk ? action.name : action.target} not summoned`, '#FF9800')
+      return
+    }
+    const dmg = action.value ?? 0
+    const isMage = atk.className === 'Mage'
+    const isArcher = atk.className === 'Archer'
+    updateCharacter(atk.id, { animState: 'attack' })
+    const fromPos = charWorldPos(atk)
+    const toPos = charWorldPos(tgt)
+
+    const fxId = Date.now() + '-' + Math.random().toString(36).slice(2, 6)
+    if (isMage) {
+      addEffect({ id: `fb-${fxId}`, type: 'fireball', from: fromPos, to: toPos, startTime: performance.now() / 1000, duration: 0.8 })
+      Sounds.fireball()
+    } else if (isArcher) {
+      addEffect({ id: `ar-${fxId}`, type: 'arrow', from: fromPos, to: toPos, startTime: performance.now() / 1000, duration: 0.7 })
+      Sounds.arrow()
+    } else {
+      addEffect({ id: `sl-${fxId}`, type: 'slash', from: fromPos, to: toPos, startTime: performance.now() / 1000, duration: 0.4 })
+      Sounds.slash()
+    }
+
+    const impactDelay = isMage ? 600 : isArcher ? 500 : 300
+    setTimeout(() => {
+      damageCharacter(tgt.id, dmg)
+      if (dmg > 0) Sounds.damage()
+      addEffect({ id: `dmg-${fxId}`, type: 'damage', from: toPos, to: toPos, value: dmg, color: isMage ? '#AB47BC' : isArcher ? '#FFEB3B' : '#F44336', startTime: performance.now() / 1000, duration: 1.2 })
+      const verb = dmg === 0 ? 'swings at' : 'hits'
+      const tail = dmg === 0 ? ' — no damage! Check your method body.' : ` for ${dmg}`
+      addLog(`⚔️ ${atk.name} ${verb} ${tgt.name}${tail}`, dmg === 0 ? '#FF9800' : isMage ? '#AB47BC' : '#F44336')
+    }, impactDelay)
+    setTimeout(() => updateCharacter(atk.id, { animState: 'idle' }), 800)
+    setTimeout(() => updateCharacter(tgt.id, { animState: tgt.hp - dmg <= 0 ? 'dead' : 'idle' }), 900)
+    return
+  }
+
+  if (action.type === 'spell' && action.target) {
+    const chars = store().characters
+    const atk = chars.find((c) => c.id === action.name)
+    const tgt = chars.find((c) => c.id === action.target)
+    if (!atk || !tgt) return
+    const dmg = action.value ?? 0
+    updateCharacter(atk.id, { animState: 'cast' })
+    const fromPos = charWorldPos(atk)
+    const toPos = charWorldPos(tgt)
+    const fxId = Date.now() + '-' + Math.random().toString(36).slice(2, 6)
+    addEffect({ id: `fb-${fxId}`, type: 'fireball', from: fromPos, to: toPos, startTime: performance.now() / 1000, duration: 1.0 })
+    Sounds.fireball()
+    setTimeout(() => {
+      damageCharacter(tgt.id, dmg)
+      addEffect({ id: `dmg-${fxId}`, type: 'damage', from: toPos, to: toPos, value: dmg, color: '#AB47BC', startTime: performance.now() / 1000, duration: 1.2 })
+      const tail = dmg === 0 ? ' — fizzled! Did castSpell update target.health?' : ` for ${dmg}`
+      addLog(`🔮 ${atk.name} casts on ${tgt.name}${tail}`, dmg === 0 ? '#FF9800' : '#AB47BC')
+      updateCharacter(atk.id, { animState: 'idle' })
+    }, 700)
+    setTimeout(() => updateCharacter(tgt.id, { animState: tgt.hp - dmg <= 0 ? 'dead' : 'idle' }), 1000)
+    return
+  }
+
+  if (action.type === 'shoot' && action.target) {
+    const chars = store().characters
+    const atk = chars.find((c) => c.id === action.name)
+    const tgt = chars.find((c) => c.id === action.target)
+    if (!atk || !tgt) return
+    const dmg = action.value ?? 0
+    const fromPos = charWorldPos(atk)
+    const toPos = charWorldPos(tgt)
+    const fxId = Date.now() + '-' + Math.random().toString(36).slice(2, 6)
+    addEffect({ id: `ar-${fxId}`, type: 'arrow', from: fromPos, to: toPos, startTime: performance.now() / 1000, duration: 0.7 })
+    Sounds.arrow()
+    setTimeout(() => {
+      damageCharacter(tgt.id, dmg)
+      if (dmg > 0) Sounds.damage()
+      addEffect({ id: `dmg-${fxId}`, type: 'damage', from: toPos, to: toPos, value: dmg, color: '#FFEB3B', startTime: performance.now() / 1000, duration: 1.2 })
+      const tail = dmg === 0 ? ' — missed! Did shoot reduce target.health?' : ` for ${dmg}`
+      addLog(`🏹 ${atk.name} shoots ${tgt.name}${tail}`, dmg === 0 ? '#FF9800' : '#FF9800')
+    }, 500)
+    setTimeout(() => updateCharacter(tgt.id, { animState: tgt.hp - dmg <= 0 ? 'dead' : 'idle' }), 800)
+    return
+  }
+
+  if (action.type === 'heal') {
+    const chars = store().characters
+    const hlr = chars.find((c) => c.id === action.name)
+    let tgt = chars.find((c) => c.id === action.target)
+    if (!tgt) tgt = hlr
+    if (!tgt) return
+    const amt = action.value ?? 0
+    healCharacter(tgt.id, amt)
+    const toPos = charWorldPos(tgt)
+    if (amt > 0) Sounds.heal()
+    const fxId = Date.now() + '-' + Math.random().toString(36).slice(2, 6)
+    addEffect({ id: `hl-${fxId}`, type: 'heal', from: toPos, to: toPos, startTime: performance.now() / 1000, duration: 1.0 })
+    addEffect({ id: `dmg-${fxId}`, type: 'damage', from: toPos, to: toPos, value: amt, color: '#4CAF50', startTime: performance.now() / 1000, duration: 1.2 })
+    const tail = amt === 0 ? ' — no effect! Did heal increase target.health?' : ` for ${amt}`
+    addLog(`✨ ${hlr?.name || 'healer'} heals ${tgt.name}${tail}`, amt === 0 ? '#FF9800' : '#4CAF50')
+    return
+  }
+
+  if (action.type === 'defend') {
+    const ch = store().characters.find((c) => c.id === action.name)
+    if (!ch) return
+    updateCharacter(ch.id, { animState: 'defend', isDefending: true })
+    Sounds.shield()
+    const pos = charWorldPos(ch)
+    addEffect({ id: `sh-${Date.now()}`, type: 'shield', from: pos, to: pos, startTime: performance.now() / 1000, duration: 3.0 })
+    addLog(`🛡️ ${action.name} defends! (incoming damage halved for 3s)`, '#42A5F5')
+    return
+  }
+
+  if (action.type === 'shieldExpired') {
+    const ch = store().characters.find((c) => c.id === action.name)
+    if (!ch) return
+    updateCharacter(ch.id, { isDefending: false, animState: ch.animState === 'defend' ? 'idle' : ch.animState })
+    return
+  }
+
+  if (action.type === 'enemyAttack' && action.target) {
+    const chars = store().characters
+    const atk = chars.find((c) => c.id === action.name)
+    const tgt = chars.find((c) => c.id === action.target)
+    if (!atk || !tgt) return
+    const dmg = action.value ?? 0
+    const fromPos = charWorldPos(atk)
+    const toPos = charWorldPos(tgt)
+    const fxId = Date.now() + '-' + Math.random().toString(36).slice(2, 6)
+    Sounds.enemyAttack()
+    updateCharacter(atk.id, { animState: 'attack' })
+    addEffect({ id: `esl-${fxId}`, type: 'slash', from: fromPos, to: toPos, startTime: performance.now() / 1000, duration: 0.4 })
+    setTimeout(() => {
+      damageCharacter(tgt.id, dmg)
+      addEffect({ id: `edmg-${fxId}`, type: 'damage', from: toPos, to: toPos, value: dmg, color: '#F44336', startTime: performance.now() / 1000, duration: 1.2 })
+      const blocked = action.shielded ? ' (BLOCKED! 50% reduced)' : ''
+      addLog(`👹 ${atk.name} attacks ${tgt.name} for ${dmg}!${blocked}`, '#F44336')
+    }, 300)
+    setTimeout(() => updateCharacter(atk.id, { animState: 'idle' }), 700)
+    return
+  }
+
+  if (action.type === 'log' || action.type === 'phase') {
+    addLog(action.text || '', action.color)
+    return
+  }
+
+  if (action.type === 'warn') {
+    addLog(`🪧 Arena: ${action.text}`, action.color || '#FF9800')
+    return
+  }
+}
+
 export function executeTraceActions(
   actions: TraceAction[],
   addLog: (text: string, color?: string) => void,
@@ -438,151 +629,8 @@ export function executeTraceActions(
    *  Map keys are character names matching charMap. */
   charMethods: Record<string, string[]> = {},
 ) {
-  const store = useGameStore.getState
-
   actions.forEach((action) => {
-    setTimeout(() => {
-      const s = store()
-      const { spawnCharacter, moveCharacter, updateCharacter, damageCharacter, healCharacter, addEffect, selectCharacter } = s
-
-      if (action.type === 'spawn' && action.data) {
-        const d = action.data
-        const isEnemy = d.col >= 7
-        spawnCharacter({
-          id: action.name, name: d.nameStr, className: d.className as CharacterState['className'],
-          col: d.col, row: d.row, targetCol: d.col, targetRow: d.row,
-          hp: d.hp, maxHp: d.maxHp, atk: d.atk, mana: d.mana, def: d.def, arrows: d.arrows,
-          isDefending: false, animState: 'idle', facingAngle: d.col > 6 ? Math.PI : 0,
-          isEnemy,
-        })
-        Sounds.spawn()
-        addLog(`⚔️ ${d.nameStr} (${d.className}) summoned! HP:${d.hp} ATK:${d.atk}`, '#4CAF50')
-        return
-      }
-
-      if (action.type === 'move' && action.col !== undefined && action.row !== undefined) {
-        moveCharacter(action.name, action.col, action.row)
-        selectCharacter(action.name)
-        addLog(`🚶 ${action.name} → (${action.col}, ${action.row})`, '#42A5F5')
-        return
-      }
-
-      if (action.type === 'attack' && action.target) {
-        const chars = store().characters
-        const atk = chars.find((c) => c.id === action.name)
-        const tgt = chars.find((c) => c.id === action.target)
-        if (!atk || !tgt) {
-          addLog(`⚠️ attack: ${!atk ? action.name : action.target} not summoned`, '#FF9800')
-          return
-        }
-        const dmg = action.value ?? atk.atk
-        const isMage = atk.className === 'Mage'
-        const isArcher = atk.className === 'Archer'
-        updateCharacter(atk.id, { animState: 'attack' })
-        const fromPos = charWorldPos(atk)
-        const toPos = charWorldPos(tgt)
-
-        const fxId = Date.now() + '-' + Math.random().toString(36).slice(2, 6)
-        if (isMage) {
-          addEffect({ id: `fb-${fxId}`, type: 'fireball', from: fromPos, to: toPos, startTime: performance.now() / 1000, duration: 0.8 })
-          Sounds.fireball()
-        } else if (isArcher) {
-          addEffect({ id: `ar-${fxId}`, type: 'arrow', from: fromPos, to: toPos, startTime: performance.now() / 1000, duration: 0.7 })
-          Sounds.arrow()
-        } else {
-          addEffect({ id: `sl-${fxId}`, type: 'slash', from: fromPos, to: toPos, startTime: performance.now() / 1000, duration: 0.4 })
-          Sounds.slash()
-        }
-
-        const impactDelay = isMage ? 600 : isArcher ? 500 : 300
-        setTimeout(() => {
-          damageCharacter(tgt.id, dmg)
-          Sounds.damage()
-          addEffect({ id: `dmg-${fxId}`, type: 'damage', from: toPos, to: toPos, value: dmg, color: isMage ? '#AB47BC' : isArcher ? '#FFEB3B' : '#F44336', startTime: performance.now() / 1000, duration: 1.2 })
-          addLog(`⚔️ ${atk.name} hits ${tgt.name} for ${dmg}`, isMage ? '#AB47BC' : '#F44336')
-        }, impactDelay)
-        setTimeout(() => updateCharacter(atk.id, { animState: 'idle' }), 800)
-        setTimeout(() => updateCharacter(tgt.id, { animState: tgt.hp - dmg <= 0 ? 'dead' : 'idle' }), 900)
-        return
-      }
-
-      if (action.type === 'spell' && action.target) {
-        const chars = store().characters
-        const atk = chars.find((c) => c.id === action.name)
-        const tgt = chars.find((c) => c.id === action.target)
-        if (!atk || !tgt) return
-        const dmg = action.value ?? atk.atk
-        updateCharacter(atk.id, { animState: 'cast' })
-        const fromPos = charWorldPos(atk)
-        const toPos = charWorldPos(tgt)
-        const fxId = Date.now() + '-' + Math.random().toString(36).slice(2, 6)
-        addEffect({ id: `fb-${fxId}`, type: 'fireball', from: fromPos, to: toPos, startTime: performance.now() / 1000, duration: 1.0 })
-        Sounds.fireball()
-        setTimeout(() => {
-          damageCharacter(tgt.id, dmg)
-          addEffect({ id: `dmg-${fxId}`, type: 'damage', from: toPos, to: toPos, value: dmg, color: '#AB47BC', startTime: performance.now() / 1000, duration: 1.2 })
-          addLog(`🔮 ${atk.name} casts on ${tgt.name} for ${dmg}`, '#AB47BC')
-          updateCharacter(atk.id, { animState: 'idle' })
-        }, 700)
-        setTimeout(() => updateCharacter(tgt.id, { animState: tgt.hp - dmg <= 0 ? 'dead' : 'idle' }), 1000)
-        return
-      }
-
-      if (action.type === 'shoot' && action.target) {
-        const chars = store().characters
-        const atk = chars.find((c) => c.id === action.name)
-        const tgt = chars.find((c) => c.id === action.target)
-        if (!atk || !tgt) return
-        const dmg = action.value ?? atk.atk
-        const fromPos = charWorldPos(atk)
-        const toPos = charWorldPos(tgt)
-        const fxId = Date.now() + '-' + Math.random().toString(36).slice(2, 6)
-        addEffect({ id: `ar-${fxId}`, type: 'arrow', from: fromPos, to: toPos, startTime: performance.now() / 1000, duration: 0.7 })
-        Sounds.arrow()
-        setTimeout(() => {
-          damageCharacter(tgt.id, dmg)
-          Sounds.damage()
-          addEffect({ id: `dmg-${fxId}`, type: 'damage', from: toPos, to: toPos, value: dmg, color: '#FFEB3B', startTime: performance.now() / 1000, duration: 1.2 })
-          addLog(`🏹 ${atk.name} shoots ${tgt.name} for ${dmg}`, '#FF9800')
-        }, 500)
-        setTimeout(() => updateCharacter(tgt.id, { animState: tgt.hp - dmg <= 0 ? 'dead' : 'idle' }), 800)
-        return
-      }
-
-      if (action.type === 'heal') {
-        const chars = store().characters
-        const hlr = chars.find((c) => c.id === action.name)
-        let tgt = chars.find((c) => c.id === action.target)
-        if (!tgt) tgt = hlr
-        if (!tgt) return
-        const amt = action.value ?? 20
-        healCharacter(tgt.id, amt)
-        const toPos = charWorldPos(tgt)
-        Sounds.heal()
-        const fxId = Date.now() + '-' + Math.random().toString(36).slice(2, 6)
-        addEffect({ id: `hl-${fxId}`, type: 'heal', from: toPos, to: toPos, startTime: performance.now() / 1000, duration: 1.0 })
-        addEffect({ id: `dmg-${fxId}`, type: 'damage', from: toPos, to: toPos, value: amt, color: '#4CAF50', startTime: performance.now() / 1000, duration: 1.2 })
-        addLog(`✨ ${hlr?.name || 'healer'} heals ${tgt.name} for ${amt}`, '#4CAF50')
-        return
-      }
-
-      if (action.type === 'defend') {
-        const ch = store().characters.find((c) => c.id === action.name)
-        if (!ch) return
-        updateCharacter(ch.id, { animState: 'defend', isDefending: true })
-        Sounds.shield()
-        const pos = charWorldPos(ch)
-        addEffect({ id: `sh-${Date.now()}`, type: 'shield', from: pos, to: pos, startTime: performance.now() / 1000, duration: 1.2 })
-        addLog(`🛡️ ${action.name} defends (damage halved for 3s)`, '#42A5F5')
-        setTimeout(() => updateCharacter(ch.id, { animState: 'idle', isDefending: false }), 3000)
-        return
-      }
-
-      if (action.type === 'log' || action.type === 'phase') {
-        addLog(action.text || '', action.color)
-        return
-      }
-    }, action.delay || 0)
+    setTimeout(() => executeTraceActionStream(action, addLog), action.delay || 0)
   })
 
   // After spawns land, wire up keyboard + enemy AI.

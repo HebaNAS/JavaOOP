@@ -136,8 +136,12 @@ export default function CharacterModel({ ch }: { ch: CharacterState }) {
   const currentPos = useRef(new THREE.Vector3(ch.col, 0, ch.row))
   const pal = PALETTES[ch.className] || PALETTES.GameCharacter
   const selectCharacter = useGameStore((s) => s.selectCharacter)
+  const setTarget = useGameStore((s) => s.setTarget)
   const selectedId = useGameStore((s) => s.selectedId)
+  const targetId = useGameStore((s) => s.targetId)
+  const addLog = useGameStore((s) => s.addLog)
   const isSelected = selectedId === ch.id
+  const isTarget = targetId === ch.id
 
   useFrame(() => {
     if (!outerRef.current) return
@@ -159,7 +163,30 @@ export default function CharacterModel({ ch }: { ch: CharacterState }) {
       useGameStore.getState().updateCharacter(ch.id, { col: ch.targetCol, row: ch.targetRow, animState: 'idle' })
   })
 
-  const handleClick = (e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); selectCharacter(ch.id) }
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation()
+    if (ch.hp <= 0) return
+    if (selectedId == null) {
+      // Nothing selected → first click picks the hero you control.
+      selectCharacter(ch.id)
+      addLog(`🎯 Selected ${ch.name}. Click another character to set a target.`, '#FFC107')
+      return
+    }
+    if (selectedId === ch.id) {
+      // Click your own hero → deselect (and clear target).
+      selectCharacter(null)
+      setTarget(null)
+      return
+    }
+    if (targetId === ch.id) {
+      // Click your current target → unset target.
+      setTarget(null)
+      addLog(`🎯 Cleared target.`, '#90A4AE')
+      return
+    }
+    setTarget(ch.id)
+    addLog(`🎯 Target: ${ch.name}. Press SPACE / E / R to act on them.`, '#F44336')
+  }
   const hpPct = ch.maxHp > 0 ? ch.hp / ch.maxHp : 1
   const hpColor = hpPct > 0.5 ? '#4CAF50' : hpPct > 0.25 ? '#FF9800' : '#F44336'
 
@@ -169,6 +196,12 @@ export default function CharacterModel({ ch }: { ch: CharacterState }) {
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
           <ringGeometry args={[0.3, 0.42, 32]} />
           <meshBasicMaterial color="#FFC107" transparent opacity={0.7} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+      {isTarget && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+          <ringGeometry args={[0.45, 0.58, 32]} />
+          <meshBasicMaterial color="#F44336" transparent opacity={0.85} side={THREE.DoubleSide} />
         </mesh>
       )}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
