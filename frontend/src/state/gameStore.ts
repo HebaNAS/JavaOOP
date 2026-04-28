@@ -73,7 +73,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
   showConfetti: false,
   enemyTimers: [],
 
-  spawnCharacter: (ch) => set((s) => ({ characters: [...s.characters, ch] })),
+  spawnCharacter: (ch) => set((s) => {
+    // Defensive: if a character with this id already exists (e.g. a stale
+    // listener dispatched the same spawn event twice), REPLACE it instead
+    // of appending — otherwise the scene fills with overlapping ghosts and
+    // damageCharacter only hits the first match, leaving stale HP bars.
+    const existingIdx = s.characters.findIndex((c) => c.id === ch.id)
+    if (existingIdx >= 0) {
+      const next = s.characters.slice()
+      next[existingIdx] = ch
+      return { characters: next }
+    }
+    return { characters: [...s.characters, ch] }
+  }),
 
   moveCharacter: (id, col, row) => set((s) => ({
     characters: s.characters.map((c) =>
