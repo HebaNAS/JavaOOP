@@ -2,6 +2,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -392,8 +393,13 @@ public class Arena {
               emit("warn", "unknown command " + p[0]);
           }
         } catch (Throwable ex) {
-          emit("warn", "dispatch error: " + ex.getClass().getSimpleName() + ": "
-            + (ex.getMessage() == null ? "" : ex.getMessage()));
+          // Reflection wraps the real exception thrown by the student's body
+          // in InvocationTargetException — unwrap so the warning shows the
+          // actual NPE / class cast / etc.
+          Throwable cause = (ex instanceof InvocationTargetException && ex.getCause() != null)
+            ? ex.getCause() : ex;
+          emit("warn", cause.getClass().getSimpleName() + ": "
+            + (cause.getMessage() == null ? "(no message)" : cause.getMessage()));
         }
       }
     } catch (IOException ignore) {
@@ -401,7 +407,11 @@ public class Arena {
     }
   }
 
-  /** Reflectively invoke caller.method(arg?) on the student's compiled class. */
+  /** Reflectively invoke caller.method(arg?) on the student's compiled class.
+   *  Tolerant of arity mismatch: if the keyboard sent a target but the
+   *  student's method takes none (or vice versa), we still find the closest
+   *  overload and call it appropriately. This lets `defend()` and
+   *  `defend(Warrior)` both work when Q is pressed. */
   private static void dispatch(String callerName, String methodName, String argName) throws Exception {
     Object caller = REGISTRY.get(callerName);
     if (caller == null) { emit("warn", "unknown actor " + callerName); return; }
@@ -412,33 +422,47 @@ public class Arena {
     }
     Method m = pickMethod(caller.getClass(), methodName, arg);
     if (m == null) {
-      emit("warn", callerName + " has no method " + methodName
-        + (arg == null ? "()" : "(" + arg.getClass().getSimpleName() + ")"));
+      emit("warn", callerName + " has no method named " + methodName
+        + ". Combat methods take 0 or 1 parameter (e.g. attack(Warrior t), defend()).");
       return;
     }
     m.setAccessible(true);
-    if (arg == null) m.invoke(caller);
-    else m.invoke(caller, arg);
+    int pc = m.getParameterCount();
+    if (pc == 0) m.invoke(caller);
+    else if (pc == 1) m.invoke(caller, arg);   // arg may be null if the controller didn't pass one
+    else { emit("warn", methodName + " has too many parameters (" + pc + ") to invoke from a keypress"); return; }
   }
 
-  /** Pick a method by name + arity. With one arg, prefer overloads whose
-   *  parameter type is assignable from the actual argument. Falls back to
-   *  the first arity match if none assignable. */
+  /** Pick a method by name. Prefer the requested arity, then prefer an
+   *  exact (assignable) parameter-type match. Fall back to the other arity
+   *  so a no-arg keypress still hits a `defend(Warrior)` and an
+   *  arg-bearing keypress still hits a `defend()`. */
   private static Method pickMethod(Class<?> cls, String name, Object arg) {
     int wantArity = arg == null ? 0 : 1;
-    Method best = null;
+    Method preferredArityBest = null;
+    Method otherArityFallback = null;
+
     for (Method m : cls.getMethods()) {
       if (!m.getName().equals(name)) continue;
-      if (m.getParameterCount() != wantArity) continue;
-      if (wantArity == 0) return m;
-      Class<?> p = m.getParameterTypes()[0];
-      if (p.isAssignableFrom(arg.getClass())) return m;   // exact-ish match
-      if (best == null) best = m;                          // arity match, lower priority
+      int pc = m.getParameterCount();
+      if (pc != 0 && pc != 1) continue;
+      if (pc == wantArity) {
+        if (pc == 0) return m;                                 // no-arg, perfect
+        Class<?> p = m.getParameterTypes()[0];
+        if (arg != null && p.isAssignableFrom(arg.getClass())) return m;   // exact-ish
+        if (preferredArityBest == null) preferredArityBest = m;
+      } else if (otherArityFallback == null) {
+        otherArityFallback = m;
+      }
     }
-    if (best != null) return best;
-    // Try declared methods (catches package-private overrides)
+    if (preferredArityBest != null) return preferredArityBest;
+    if (otherArityFallback != null) return otherArityFallback;
+
+    // Last-ditch: declared methods (catches package-private overrides)
     for (Method m : cls.getDeclaredMethods()) {
-      if (m.getName().equals(name) && m.getParameterCount() == wantArity) return m;
+      if (!m.getName().equals(name)) continue;
+      int pc = m.getParameterCount();
+      if (pc == 0 || pc == 1) return m;
     }
     return null;
   }

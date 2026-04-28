@@ -36,9 +36,13 @@ const METHOD_KEY_MAP: Record<string, string[]> = {
 }
 
 const MOVE_METHODS = new Set(['moveUp', 'moveDown', 'moveLeft', 'moveRight'])
-const TARGETED_METHODS = new Set(['attack', 'castSpell', 'shoot'])
-// heal: invoked without a target; the student's code decides who to heal
-// (usually self via Healable.heal(int amount), or a parameter they pass).
+// Combat methods that REQUIRE a target — bail with a friendly message if
+// none can be picked.
+const NEEDS_TARGET = new Set(['attack', 'castSpell', 'shoot'])
+// Combat methods where a target is OPTIONAL — we pass one if we have it
+// (so `defend(Warrior attacker)` overloads work) but JVM dispatch tolerates
+// the no-arg `defend()` form too.
+const OPTIONAL_TARGET = new Set(['defend', 'heal'])
 
 export function setupKeyboardBindings(charMethods: { charId: string; methods: string[] }[]) {
   clearKeyboardBindings()
@@ -117,17 +121,19 @@ function dispatchKeyAction(method: string, charId: string) {
     return
   }
 
-  // Targeted methods need a victim. Honour a manually-clicked target if the
-  // student set one (red ring on a character); otherwise fall back to the
-  // nearest live "other" character so the original auto-aim still works
-  // when no one's been clicked.
-  if (TARGETED_METHODS.has(method)) {
-    let target: { id: string } | null = null
+  // Pick a target — manually clicked one (red ring) wins; otherwise the
+  // nearest live "other" character within range. Used by both required-
+  // target methods (attack/cast/shoot) and optional-target ones.
+  const pickTarget = (): { id: string } | null => {
     if (store.targetId) {
       const picked = store.characters.find((c) => c.id === store.targetId && c.hp > 0)
-      if (picked) target = picked
+      if (picked) return picked
     }
-    if (!target) target = findNearestOther(ch, store.characters)
+    return findNearestOther(ch, store.characters)
+  }
+
+  if (NEEDS_TARGET.has(method)) {
+    const target = pickTarget()
     if (!target) {
       store.addLog(`👻 No target in range for ${ch.name}.${method}(). Click an enemy to lock it.`, '#FF9800')
       return
@@ -136,7 +142,17 @@ function dispatchKeyAction(method: string, charId: string) {
     return
   }
 
-  // defend, heal, jump, etc. — no target argument.
+  if (OPTIONAL_TARGET.has(method)) {
+    // Pass a target IF we have one — JVM dispatch is tolerant: it'll call
+    // defend(Warrior) with the target if the student wrote that signature,
+    // or defend() (no-arg) if they wrote the chapter-canonical form.
+    const target = pickTarget()
+    if (target) session.invoke(ch.id, method, target.id)
+    else session.invoke(ch.id, method)
+    return
+  }
+
+  // jump, etc. — no target argument.
   session.invoke(ch.id, method)
 }
 
