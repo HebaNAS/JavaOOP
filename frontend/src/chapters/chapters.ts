@@ -146,7 +146,7 @@ export const CHAPTERS: Chapter[] = [
       'Write attack(Warrior target) inside Mage with the same signature as Warrior. Decide what makes the magical version different — bigger damage? Different damage formula? Whatever YOUR body computes IS what happens.',
       'Define attack() again inside Mage. Body example: "target.health -= this.attackPower * 2;" — twice the damage of the inherited version. Then call attack on both a Warrior and a Mage.',
     ],
-    starter: 'class Warrior {\n    String name;\n    int health;\n    int attackPower;\n    boolean shielded;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n    public void defend() { this.shielded = true; }\n}\n\nclass Mage extends Warrior {\n    int mana;\n\n    Mage(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    // Override attack() — write your own magical version below.\n    // Same signature as Warrior.attack, different body. Must reduce\n    // target.health for the spell to actually deal damage.\n\n    // castSpell is Mage-only. Same WYSIWYG rule: body must subtract from\n    // target.health, otherwise the visual fires but enemy HP doesn\'t move.\n    public void castSpell(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nWarrior hero = new Warrior("Aldric", 100, 25);\nMage wizard  = new Mage("Elara", 80, 35);\nWarrior enemy = new Warrior("Grok", 120, 20);\n\n// Call attack() on BOTH hero and wizard! Click an enemy first to lock it.\n',
+    starter: 'class Warrior {\n    String name;\n    int health;\n    int attackPower;\n    boolean shielded;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n    public void defend() { this.shielded = true; }\n}\n\nclass Mage extends Warrior {\n    int mana;\n\n    // super(...) calls Warrior\'s constructor so name/health/attackPower\n    // get set the same way as a plain Warrior. (Chapter 16 explains why.)\n    Mage(String name, int health, int attackPower) {\n        super(name, health, attackPower);\n    }\n\n    // Override attack() — write your own magical version below.\n    // Same signature as Warrior.attack, different body. Must reduce\n    // target.health for the spell to actually deal damage.\n\n    // castSpell is Mage-only. Same WYSIWYG rule: body must subtract from\n    // target.health, otherwise the visual fires but enemy HP doesn\'t move.\n    public void castSpell(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nWarrior hero = new Warrior("Aldric", 100, 25);\nMage wizard  = new Mage("Elara", 80, 35);\nWarrior enemy = new Warrior("Grok", 120, 20);\n\n// Call attack() on BOTH hero and wizard! Click an enemy first to lock it.\n',
     validate(p) {
       const mg = p.classes.find((c) => c.name === 'Mage')
       if (!mg) return { pass: false, msg: 'Keep the Mage class' }
@@ -163,13 +163,13 @@ export const CHAPTERS: Chapter[] = [
   // ─── CHAPTER 8: The Archer ───
   {
     id: 8, title: 'Chapter 8: The Ranger', concept: 'Subclass Hierarchy',
-    description: 'Create an Archer class extending Warrior with arrowCount and shoot(). Summon an Archer and shoot an enemy!',
+    description: 'Create an Archer class extending Warrior with arrowCount and shoot(). Summon an Archer and shoot an enemy! shoot must subtract from target.health — same WYSIWYG rule as attack.',
     hints: [
       'Not all heroes fight up close. An Archer strikes from distance with arrows.',
-      'Same extends pattern. Think about what makes an archer unique — ammunition that can run out.',
-      'Archer extends Warrior with int arrowCount and shoot(Warrior target). Create the object and call shoot()!',
+      'Same extends pattern as Mage. Think about what makes an archer unique — ammunition that can run out.',
+      'Archer extends Warrior with int arrowCount and shoot(Warrior target). Body MUST subtract from target.health for the arrow to actually wound. Create the object, click an enemy to lock target (red ring), then call shoot() or press E.',
     ],
-    starter: 'class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nclass Mage extends Warrior {\n    int mana;\n    Mage(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n    public void castSpell(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\n// Create: class Archer extends Warrior\n//   int arrowCount; shoot(Warrior t) { target.health -= this.attackPower; }\n\nWarrior hero = new Warrior("Aldric", 100, 25);\nMage wizard  = new Mage("Elara", 80, 35);\n// Create an Archer and call shoot()!\n',
+    starter: 'class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nclass Mage extends Warrior {\n    int mana;\n    Mage(String name, int health, int attackPower) {\n        super(name, health, attackPower);   // see chapter 16 for the why\n    }\n    public void castSpell(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\n// Create: class Archer extends Warrior\n//   int arrowCount; — declare it as a field\n//   constructor — call super(name, health, attackPower) like Mage does\n//   shoot(Warrior t) — body MUST do: t.health -= this.attackPower;\n//                      otherwise the arrow visual flies but does no damage.\n\nWarrior hero = new Warrior("Aldric", 100, 25);\nMage wizard  = new Mage("Elara", 80, 35);\n// Create an Archer (e.g. "Swift") and call shoot() on an enemy!\n',
     validate(p) {
       const ar = p.classes.find((c) => c.name === 'Archer')
       if (!ar) return { pass: false, msg: "Create a class called 'Archer'" }
@@ -185,13 +185,13 @@ export const CHAPTERS: Chapter[] = [
   // ─── CHAPTER 9: Abstract & Interfaces ───
   {
     id: 9, title: 'Chapter 9: Sacred Contracts', concept: 'Abstract & Interfaces',
-    description: 'Make GameCharacter abstract with abstract specialAbility(). Create interface Healable with heal(). Make Mage implement both!',
+    description: 'Make GameCharacter abstract with abstract specialAbility(). Create interface Healable with heal(). Make Mage implement both! heal(amount) should INCREASE this.health by amount — the game reads health before/after and shows the actual healing.',
     hints: [
       'Some blueprints should never be built directly. Abstract classes are templates that children MUST complete.',
       '\'abstract\' on a class prevents instantiation. Abstract methods have no body. \'interface\' is a contract.',
-      'Declare abstract class GameCharacter with abstract specialAbility(). Interface Healable with heal(int). Mage extends + implements both.',
+      'In Mage: specialAbility() body — your choice (e.g. damage all enemies, log a message). heal(int amount) body MUST do `this.health += amount` (or similar) — empty body = the trace shows "0 HP healed". The game runs your code, not your method name.',
     ],
-    starter: '// Create: abstract class GameCharacter\n//   String name, int health, int attackPower\n//   constructor, attack method\n//   abstract void specialAbility()\n\n// Create: interface Healable { void heal(int amount); }\n\n// Mage extends GameCharacter implements Healable\n// Must override specialAbility() and heal()\n\n// Create a Mage and call both methods!\n',
+    starter: '// Create: abstract class GameCharacter\n//   String name, int health, int attackPower\n//   constructor, attack(GameCharacter t) — body MUST subtract from t.health\n//   abstract void specialAbility()\n\n// Create: interface Healable { void heal(int amount); }\n\n// Mage extends GameCharacter implements Healable\n// Override specialAbility(): body is your choice (must do SOMETHING).\n// Override heal(int amount): body MUST do this.health += amount;\n//   (or similar). The game measures the change to this.health.\n\n// Create a Mage and call both methods!\n',
     validate(p) {
       const gc = p.classes.find((c) => c.name === 'GameCharacter')
       if (!gc) return { pass: false, msg: "Create an abstract class 'GameCharacter'" }
@@ -212,13 +212,13 @@ export const CHAPTERS: Chapter[] = [
   // ─── CHAPTER 10: Collections ───
   {
     id: 10, title: 'Chapter 10: The Grand Battle', concept: 'Collections — ArrayList',
-    description: 'Assemble your party! Create ArrayList<Warrior> party, add 3+ heroes, use for-each to make everyone attack the boss!',
+    description: 'Assemble your party! Create ArrayList<Warrior> party, add 3+ heroes, use for-each to make everyone attack the boss! Each subclass attack body must subtract from target.health — empty bodies = the boss takes no damage no matter how many for-each iterations run.',
     hints: [
       'Managing heroes one by one is tedious. Collections group them so you can command everyone at once.',
       'ArrayList stores objects in order. Use .add() to insert, for-each to iterate without needing an index.',
-      'Declare ArrayList<Warrior> party = new ArrayList<>(); Use party.add(hero). Loop: for (Warrior w : party) { w.attack(boss); }',
+      'Declare ArrayList<Warrior> party = new ArrayList<>(); Use party.add(hero). Loop: for (Warrior w : party) { w.attack(boss); } — the for-each calls each hero\'s attack method, polymorphism picks the right one. Bron uses Warrior.attack, Elara uses Mage.attack, Swift uses Archer.attack.',
     ],
-    starter: 'class Warrior {\n    String name;\n    int health;\n    int attackPower;\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nclass Mage extends Warrior {\n    int mana;\n    Mage(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n    public void castSpell(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nclass Archer extends Warrior {\n    int arrowCount;\n    Archer(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n    public void shoot(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nWarrior tank   = new Warrior("Bron", 150, 20);\nMage wizard    = new Mage("Elara", 80, 35);\nArcher ranger  = new Archer("Swift", 70, 30);\nWarrior boss   = new Warrior("Dreadlord", 200, 40);\n\n// Create ArrayList, add heroes, for-each attack the boss!\n',
+    starter: 'class Warrior {\n    String name;\n    int health;\n    int attackPower;\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nclass Mage extends Warrior {\n    int mana;\n    Mage(String name, int health, int attackPower) {\n        super(name, health, attackPower);\n    }\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n    public void castSpell(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nclass Archer extends Warrior {\n    int arrowCount;\n    Archer(String name, int health, int attackPower) {\n        super(name, health, attackPower);\n    }\n    public void shoot(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nWarrior tank   = new Warrior("Bron", 150, 20);\nMage wizard    = new Mage("Elara", 80, 35);\nArcher ranger  = new Archer("Swift", 70, 30);\nWarrior boss   = new Warrior("Dreadlord", 200, 40);\n\n// Create ArrayList, add heroes, for-each attack the boss!\n',
     validate(p) {
       const l = p.collections.find((c) => c.name === 'party')
       if (!l) return { pass: false, msg: 'Create: ArrayList<Warrior> party = new ArrayList<>();' }
@@ -233,13 +233,13 @@ export const CHAPTERS: Chapter[] = [
   // ─── CHAPTER 11: Method Overloading ───
   {
     id: 11, title: 'Chapter 11: Double Strike', concept: 'Method Overloading',
-    description: 'Overloading lets you create multiple methods with the same name but different parameters. Add two attack methods: attack(Warrior target) and attack(Warrior target, int bonus). Call both!',
+    description: 'Overloading lets you create multiple methods with the same name but different parameters. Add two attack methods: attack(Warrior target) and attack(Warrior target, int bonus). Call both! Both bodies must subtract from target.health — the bonus version typically subtracts more.',
     hints: [
       'What if a warrior could attack normally OR with a power boost? Same action name, but different inputs change the behavior.',
-      'Overloading means same method name, different parameter lists. The compiler picks which one to call based on the arguments you provide.',
-      'Add attack(Warrior target) AND attack(Warrior target, int bonus) with different bodies. Call one with just a target and the other with target + bonus number.',
+      'Overloading means same method name, different parameter lists. The compiler picks which one to call based on the arguments you provide. Different signature → different method, even with the same name.',
+      'attack(Warrior target) body: target.health -= this.attackPower. attack(Warrior target, int bonus) body: target.health -= (this.attackPower + bonus). Then call hero.attack(enemy) AND hero.attack(enemy, 10) — you\'ll see two damage numbers, the second larger.',
     ],
-    starter: 'class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    // Add attack(Warrior target)\n    // Add attack(Warrior target, int bonus) — overloaded!\n    \n}\n\nWarrior hero = new Warrior("Aldric", 100, 25);\nWarrior enemy = new Warrior("Grok", 120, 20);\n\n// Call both: hero.attack(enemy); and hero.attack(enemy, 10);\n',
+    starter: 'class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    // Add attack(Warrior target) — body MUST subtract from target.health\n    // Add attack(Warrior target, int bonus) — overloaded! Same rule:\n    //   the body decides the damage; bonus typically adds extra.\n    \n}\n\nWarrior hero = new Warrior("Aldric", 100, 25);\nWarrior enemy = new Warrior("Grok", 120, 20);\n\n// Call both: hero.attack(enemy); and hero.attack(enemy, 10);\n',
     validate(p) {
       const c = p.classes.find((c) => c.name === 'Warrior')
       if (!c) return { pass: false, msg: 'Keep your Warrior class!' }
@@ -302,13 +302,13 @@ export const CHAPTERS: Chapter[] = [
   // ─── CHAPTER 14: Type Casting ───
   {
     id: 14, title: 'Chapter 14: Shapeshifter', concept: 'Type Casting & instanceof',
-    description: 'A Mage stored as a Warrior variable can be cast back. Create a Warrior variable holding a Mage, then cast it and call castSpell(). Demonstrate polymorphic assignment!',
+    description: 'A Mage stored as a Warrior variable can be cast back. Create a Warrior variable holding a Mage, then cast it and call castSpell(). Demonstrate polymorphic assignment! castSpell body must reduce target.health for the spell to actually deal damage.',
     hints: [
       'A child object can be stored in a parent variable — that\'s upcasting. But to access child-specific methods, you need to cast it back — that\'s downcasting.',
-      'Warrior w = new Mage(...) is valid because Mage IS a Warrior. To call castSpell(), you need: ((Mage)w).castSpell(target)',
-      'Create: Warrior disguised = new Mage("Elara", 80, 35); Then call a Warrior method on it AND cast it to call castSpell.',
+      'Warrior w = new Mage(...) is valid because Mage IS a Warrior. To call castSpell(), you need: ((Mage)w).castSpell(target). The runtime object is still a Mage so its compiled castSpell body runs — and that body decides the damage.',
+      'Create: Warrior disguised = new Mage("Elara", 80, 35); Call disguised.attack(enemy) — Mage.attack runs (polymorphism). Then ((Mage)disguised).castSpell(enemy) — castSpell body subtracts from enemy.health.',
     ],
-    starter: 'class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nclass Mage extends Warrior {\n    int mana;\n\n    Mage(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n\n    public void castSpell(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\n// Create: Warrior disguised = new Mage("Elara", 80, 35);\nWarrior enemy = new Warrior("Grok", 120, 20);\n\n// Call attack on disguised, then castSpell!\n',
+    starter: 'class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\nclass Mage extends Warrior {\n    int mana;\n\n    Mage(String name, int health, int attackPower) {\n        super(name, health, attackPower);\n    }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n\n    public void castSpell(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\n// Create: Warrior disguised = new Mage("Elara", 80, 35);\nWarrior enemy = new Warrior("Grok", 120, 20);\n\n// Call attack on disguised, then castSpell!\n',
     validate(p) {
       // Check for a Warrior-typed variable holding a Mage
       const polyObj = p.objects.find((o) => o.type === 'Warrior' && o.className === 'Mage')
@@ -324,11 +324,11 @@ export const CHAPTERS: Chapter[] = [
   // ─── CHAPTER 15: Final Boss ───
   {
     id: 15, title: 'Chapter 15: The Final Boss', concept: 'Full OOP Battle',
-    description: 'Put EVERYTHING together! Define a class hierarchy (Warrior, Mage, Archer, Healer), create an ArrayList party, give everyone unique names and stats, heal your team, and defeat the boss with a coordinated attack!',
+    description: 'Put EVERYTHING together! Define a class hierarchy (Warrior, Mage, Archer, Healer), create an ArrayList party, give everyone unique names and stats, heal your team, and defeat the boss with a coordinated attack! Every method body must do its real job — attack subtracts health, heal adds health, castSpell subtracts (more), shoot subtracts. Empty bodies = the boss laughs at you.',
     hints: [
-      'This is the ultimate challenge. You need classes, inheritance, objects with unique names, collections, healing, and combat. Plan your party composition wisely!',
+      'This is the ultimate challenge. You need classes, inheritance, objects with unique names, collections, healing, and combat. Plan your party composition wisely.',
       'Create at least 4 classes in a hierarchy. Build an ArrayList, add your heroes. Use heal() to prepare, then for-each to attack the boss as a team.',
-      'Define Warrior, Mage (extends), Archer (extends), and Healer (extends). Create unique heroes, add to ArrayList<Warrior> party. Heal first, then for-each loop to attack the boss.',
+      'Healer.heal(Warrior t) body: t.health += this.attackPower (or a healing-specific stat). Mage.castSpell body: t.health -= 2 * this.attackPower. Archer.shoot body: t.health -= this.attackPower. Boss name like "Dreadlord" auto-spawns on the enemy side.',
     ],
     starter: '// Define your class hierarchy:\n// Warrior (base), Mage, Archer, Healer (all extend Warrior)\n// Each with unique methods: castSpell, shoot, heal\n\n// Create your heroes with UNIQUE names and stats\n// Build an ArrayList<Warrior> party\n// Add everyone to the party\n// Heal your team, then for-each attack the boss!\n\n// THE BOSS: Warrior boss = new Warrior("Dreadlord", 300, 50);\n// Can your party defeat it?\n',
     validate(p) {
@@ -356,11 +356,11 @@ export const CHAPTERS: Chapter[] = [
   // ─── CHAPTER 16: super() Constructor Chaining ───
   {
     id: 16, title: 'Chapter 16: The Chain of Command', concept: 'super() — Constructor Chaining',
-    description: 'A child class must honour its parent. Use super() in Mage\'s constructor to call Warrior\'s constructor, passing name, health, and attackPower up the chain. Then add mana as Mage\'s own field. Create a Mage and verify it works!',
+    description: 'A child class must honour its parent. Use super() in Mage\'s constructor to call Warrior\'s constructor, passing name, health, and attackPower up the chain. Then add mana as Mage\'s own field. Create a Mage and verify it works! The game waits for the FULL chain to finish before reading your stats — Mage\'s mana is included in the spawn even though super() runs first.',
     hints: [
       'When Mage extends Warrior, the parent\'s fields are set by the parent\'s constructor — not by the child directly.',
       'Inside Mage\'s constructor, the FIRST line must be: super(name, health, attackPower); — then set this.mana = mana;',
-      'Mage(String name, int health, int attackPower, int mana) { super(name, health, attackPower); this.mana = mana; }',
+      'Mage(String name, int health, int attackPower, int mana) { super(name, health, attackPower); this.mana = mana; } — then `new Mage("Elara", 80, 35, 100)` and the on-screen card shows mana=100.',
     ],
     starter: 'class Warrior {\n    String name;\n    int health;\n    int attackPower;\n\n    Warrior(String name, int health, int attackPower) {\n        this.name = name;\n        this.health = health;\n        this.attackPower = attackPower;\n    }\n\n    public void attack(Warrior target) {\n        target.health = target.health - this.attackPower;\n    }\n}\n\n// Create Mage extending Warrior\n// Use super() in the constructor!\n// Add int mana as Mage\'s own field\n\n// Create a Mage and a Warrior, have the Mage attack!\n',
     validate(p) {

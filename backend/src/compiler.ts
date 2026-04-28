@@ -257,10 +257,14 @@ function methodInjection(name: string, params: ParamInfo[]): Injection | null {
     }
     case 'moveUp': case 'moveDown': case 'moveLeft': case 'moveRight':
     case 'move':
+      // Use reflective snapshots so classes WITHOUT x/y fields still compile
+      // — e.g. Chapter 17's Vehicle/Car/Boat. When the field exists the
+      // values match `this.x`/`this.y` exactly; when it doesn't they're 0,
+      // so Arena.move sees pre==post and emits nothing.
       return {
-        prefix: `int __jqx = this.x; int __jqy = this.y;`,
-        suffix: `Arena.move(this, this.x, this.y, __jqx, __jqy);`,
-        legacy: `Arena.move(this, this.x, this.y);`,
+        prefix: `int __jqx = Arena.snapshotInt(this, "x"); int __jqy = Arena.snapshotInt(this, "y");`,
+        suffix: `Arena.move(this, Arena.snapshotInt(this, "x"), Arena.snapshotInt(this, "y"), __jqx, __jqy);`,
+        legacy: `Arena.move(this, Arena.snapshotInt(this, "x"), Arena.snapshotInt(this, "y"));`,
       }
   }
   return null

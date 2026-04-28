@@ -100,6 +100,20 @@ public class Arena {
     return v < 0 ? 0 : v;
   }
 
+  /** Reflectively read an int field. Returns 0 if the field doesn't exist —
+   *  this lets the auto-injected `move()` instrumentation compile against
+   *  classes with no x/y fields (e.g. Chapter 17's Vehicle/Car/Boat). */
+  public static int snapshotInt(Object o, String fieldName) {
+    if (o == null) return 0;
+    try {
+      Field f = findField(o.getClass(), fieldName);
+      if (f == null) return 0;
+      f.setAccessible(true);
+      Object v = f.get(o);
+      return v instanceof Number ? ((Number) v).intValue() : 0;
+    } catch (Exception e) { return 0; }
+  }
+
   /** Read current shield-like boolean. Returns false if no field is found —
    *  treated as "wasn't shielded before". */
   public static boolean snapshotShield(Object o) {
